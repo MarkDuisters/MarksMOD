@@ -1,0 +1,20 @@
+{
+    "name": "MarksMOD.Editor",
+    "rootNamespace": "",
+    "references": [
+        "BakeryEditorAssembly",
+        "BakeryRuntimeAssembly",
+        "MarksMOD.Core"
+    ],
+    "includePlatforms": [
+        "Editor"
+    ],
+    "excludePlatforms": [],
+    "allowUnsafeCode": false,
+    "overrideReferences": false,
+    "precompiledReferences": [],
+    "autoReferenced": true,
+    "defineConstraints": [],
+    "versionDefines": [],
+    "noEngineReferences": false
+}
