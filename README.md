@@ -19,16 +19,22 @@ MarksMOD adds a Linux/Wine compatibility layer to an existing Bakery installatio
 
 `Restore Bakery` reverts the patched Bakery scripts from the stored backups.
 
-The current patcher version is 5 and targets eight Bakery files.
+The current patcher version is 6 and targets eight Bakery files.
 
 ## Tested scope
 
-The tested path is Linux + NVIDIA + URP + RTX9 (ftraceRTX9). The test suite covers full lighting, indirect, shadowmask, distance shadowmask, subtractive, AO-only, directional modes, light types, volumes, sectors, prefabs, transparency, denoisers (OptiX 7, OIDN v1/v2), light/reflection probes, cache reuse, cancel/re-bake, runtime lightmap apply, patcher apply/restore, and source isolation.
+The tested path is Linux + NVIDIA + URP + RTX9 (ftraceRTX9). The test suite covers full lighting, indirect, shadowmask, distance shadowmask, subtractive, AO-only, directional modes, light types, volumes, sectors, prefabs, transparency, denoisers (OptiX 7, OIDN v1/v2), light/reflection probes, cache reuse, cancel/re-bake, runtime lightmap apply, patcher apply/restore, xatlas atlas packing, xatlas unwrapping, multi-atlas/implicit groups, two-level LOD groups, and source isolation.
+
+## xatlas
+
+- `libxatlasLib.so` is built from the upstream xatlas source (MIT) in `Native/third_party/xatlas`.
+- The UV-mesh path (`PackWithXatlas`) matches the Windows `xatlasLib.dll` in tests.
+- The import-time AddMesh unwrap path is functional, but its UV layout can differ from the older Windows parameterizer. Bakes remain valid.
+- Two-level LOD groups are tested. Very large meshes and the 32-bit index guard are not covered on this Unity version. No independent atlas UV overlap/bounds validation is claimed.
 
 ## Known limitations
 
 - The TEMP path must be ASCII. Non-ASCII TEMP paths fail inside the vendor `uvGBufferGen` scene loader. Non-ASCII output paths work.
-- xatlas is forced to the Default atlas packer on Linux. xatlas/LOD paths are not supported.
 - The Bakery updater (`ExtractZIP`) is not implemented.
 - OptiX 5 and OptiX 6 denoisers are unsupported under Wine. Use OptiX 7, RTX9 or OIDN.
 - ECS, terrain, skinned meshes, APV and probe-SH directional mode have no test fixtures and are not claimed as supported. APV was not tested.

@@ -8,14 +8,15 @@ managed code reaches through a `DllImport` resolver (`MarksMOD/Editor/BakeryLinu
 
 ```
 MarksMOD/Native/
-  src/glue/      libbakery_glue.so   CPU/OS shim (process, progress, user32, half2vb, uvrepack, xatlas, zip)
+  src/glue/      libbakery_glue.so   CPU/OS shim (process, progress, user32, half2vb, uvrepack, zip)
+                 libxatlasLib.so     real xatlas wrapper (upstream xatlas + xatlas_bridge.cpp)
   src/frender/   libfrender.so       ABI proxy to the Wine-hosted frender.dll (or stub)
   src/wine/      bakery_wine_host    Wine worker: loads real frender.dll, serves IPC
   src/ftrace/    ftrace*             (unused in the Wine path; kept for the native contingency)
   src/tools/     combine*, ftServer, seamfixer, ...   CLI helpers
   wine/          bootstrap/probe/build scripts for the Wine bridge
   build/         CMake build
-  third_party/   pinned dependency acquisition
+  third_party/   pinned dependencies (xatlas source)
   dist~/lib/      built shared libraries (Unity-ignored; install-libs copies them)
   dist~/bin/      built tool executables (Unity-ignored)
 ```
@@ -45,7 +46,7 @@ name. `install-libs.sh` copies the built libraries into `Assets/Plugins/x86_64` 
 | `xatlasLib` | `libxatlasLib.so` |
 | `user32.dll` | `libuser32.so` |
 
-All alias libraries are copies of `libbakery_glue.so` except `libfrender.so`.
+All alias libraries are copies of `libbakery_glue.so` except `libfrender.so` and `libxatlasLib.so`, which is built from `third_party/xatlas/xatlas.cpp` plus `src/glue/xatlas_bridge.cpp`.
 
 ## Build
 

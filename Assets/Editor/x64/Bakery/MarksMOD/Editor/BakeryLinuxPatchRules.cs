@@ -111,9 +111,12 @@ public static class BakeryLinuxPatchRules
             case "ftUpdater.cs": return text.IndexOf("BakeryProcess.ExtractZIP", StringComparison.Ordinal) >= 0;
             case "ftBuildGraphics.cs": return text.IndexOf("BakeryProgress.Show", StringComparison.Ordinal) >= 0 &&
                 text.IndexOf("AddTempPinnedHandle", StringComparison.Ordinal) >= 0 &&
-                text.IndexOf("skipping the probe lightmap group", StringComparison.Ordinal) >= 0;
+                text.IndexOf("skipping the probe lightmap group", StringComparison.Ordinal) >= 0 &&
+                text.IndexOf("public static ftGlobalStorage.AtlasPacker atlasPacker = ftGlobalStorage.AtlasPacker.Default;", StringComparison.Ordinal) < 0 &&
+                text.IndexOf("if (packer == ftGlobalStorage.AtlasPacker.xatlas) packer = ftGlobalStorage.AtlasPacker.Default;", StringComparison.Ordinal) < 0;
             case "ftRenderLightmap.cs": return text.IndexOf("BakeryProcess.RunLocalProcess", StringComparison.Ordinal) >= 0 &&
-                text.IndexOf("ResolveProbeLightingDataAssetPath", StringComparison.Ordinal) >= 0;
+                text.IndexOf("ResolveProbeLightingDataAssetPath", StringComparison.Ordinal) >= 0 &&
+                text.IndexOf("if (ftBuildGraphics.atlasPacker == ftGlobalStorage.AtlasPacker.xatlas) ftBuildGraphics.atlasPacker = ftGlobalStorage.AtlasPacker.Default;", StringComparison.Ordinal) < 0;
             case "ftModelPostProcessor.cs": return text.IndexOf("BAKERY_TEST_DISABLE_IMPORT_UNWRAP", StringComparison.Ordinal) >= 0;
             case "ftClearCache.cs": return text.IndexOf("Path.GetTempPath()", StringComparison.Ordinal) >= 0 &&
                 text.IndexOf("GetEnvironmentVariable(\"TEMP\"", StringComparison.Ordinal) < 0;
@@ -168,6 +171,8 @@ public static class BakeryLinuxPatchRules
 
     static void PatchBuildGraphics(BakeryLinuxPatchFile f)
     {
+        if (RemoveBuildGraphicsXatlasFallbacks(f)) return;
+
         if (f.Text.IndexOf("static void AddTempPinnedHandle(GCHandle handle)", StringComparison.Ordinal) < 0)
         {
             f.Replace("tempPinnedHandles.Add(handle);", "AddTempPinnedHandle(handle);");
@@ -188,24 +193,6 @@ public static class BakeryLinuxPatchRules
                 @"(?m)^([ \t]*)var tempDir = System\.Environment\.GetEnvironmentVariable\(""TEMP"", System\.EnvironmentVariableTarget\.Process\);\r?\n[ \t]*scenePath = tempDir \+ ""\\\\frender"";",
                 m => m.Groups[1].Value + "scenePath = System.IO.Path.Combine(System.IO.Path.GetTempPath(), \"frender\");");
         }
-
-        if (f.Text.IndexOf("public static ftGlobalStorage.AtlasPacker atlasPacker = ftGlobalStorage.AtlasPacker.Default;", StringComparison.Ordinal) < 0)
-        {
-            string oldDeclaration = "    public static ftGlobalStorage.AtlasPacker atlasPacker = ftGlobalStorage.AtlasPacker.xatlas;";
-            string newDeclaration = "#if UNITY_EDITOR_LINUX" + f.NewLine +
-                                    "    public static ftGlobalStorage.AtlasPacker atlasPacker = ftGlobalStorage.AtlasPacker.Default;" + f.NewLine +
-                                    "#else" + f.NewLine +
-                                    "    public static ftGlobalStorage.AtlasPacker atlasPacker = ftGlobalStorage.AtlasPacker.xatlas;" + f.NewLine +
-                                    "#endif";
-            f.Replace(oldDeclaration, newDeclaration);
-        }
-
-        PatchPackerAfter(f,
-            "                    var packer = group.atlasPacker == BakeryLightmapGroup.AtlasPacker.Auto ? atlasPacker : (ftGlobalStorage.AtlasPacker)group.atlasPacker;",
-            "                    ");
-        PatchPackerAfter(f,
-            "                var packer = lmgroup.atlasPacker == BakeryLightmapGroup.AtlasPacker.Auto ? atlasPacker : (ftGlobalStorage.AtlasPacker)lmgroup.atlasPacker;",
-            "                ");
 
         f.ReplaceLines(
 @"        var probes = LightmapSettings.lightProbes;
@@ -248,16 +235,29 @@ public static class BakeryLinuxPatchRules
                   "Path.Combine(Path.GetTempPath(), \"frender\")");
     }
 
-    static void PatchPackerAfter(BakeryLinuxPatchFile f, string anchor, string indent)
+    static bool RemoveBuildGraphicsXatlasFallbacks(BakeryLinuxPatchFile f)
     {
-        string block = "#if UNITY_EDITOR_LINUX" + f.NewLine +
-                       indent + "if (packer == ftGlobalStorage.AtlasPacker.xatlas) packer = ftGlobalStorage.AtlasPacker.Default;" + f.NewLine +
-                       "#endif";
-        f.InsertAfter(anchor, block);
+        string wrappedDeclaration = "#if UNITY_EDITOR_LINUX" + f.NewLine +
+                                    "    public static ftGlobalStorage.AtlasPacker atlasPacker = ftGlobalStorage.AtlasPacker.Default;" + f.NewLine +
+                                    "#else" + f.NewLine +
+                                    "    public static ftGlobalStorage.AtlasPacker atlasPacker = ftGlobalStorage.AtlasPacker.xatlas;" + f.NewLine +
+                                    "#endif";
+        bool removed = f.ReplaceLines(wrappedDeclaration,
+            "    public static ftGlobalStorage.AtlasPacker atlasPacker = ftGlobalStorage.AtlasPacker.xatlas;",
+            false);
+
+        removed |= f.ReplaceRegex(
+            @"(?m)^[ \t]*#if UNITY_EDITOR_LINUX\r?\n[ \t]*if \(packer == ftGlobalStorage\.AtlasPacker\.xatlas\) packer = ftGlobalStorage\.AtlasPacker\.Default;\r?\n[ \t]*#endif\r?\n",
+            m => string.Empty,
+            false);
+
+        return removed;
     }
 
     static void PatchRenderLightmap(BakeryLinuxPatchFile f)
     {
+        if (RemoveRenderLightmapXatlasFallbacks(f)) return;
+
         f.Replace("var exeProcess = RunLocalProcess(", "var exeProcess = BakeryProcess.RunLocalProcess(");
         f.Replace("while(!IsProcessFinished(", "while(!BakeryProcess.IsProcessFinished(");
         if (f.Text.IndexOf("BakeryProcess.StopProcess(exeProcess);", StringComparison.Ordinal) < 0)
@@ -538,22 +538,13 @@ public static class BakeryLinuxPatchRules
 
         // Store lightmap flags");
 
-        AddRenderPacker(f,
-            "            ftBuildGraphics.atlasPacker = (ftGlobalStorage.AtlasPacker)EditorGUILayout.EnumPopup(ftBuildGraphics.atlasPacker, opts);",
-            "        ");
-        AddRenderPacker(f,
-            "        ftBuildGraphics.atlasPacker = storage.renderSettingsAtlasPacker;",
-            "        ");
-        AddRenderPacker(f,
-            "        ftBuildGraphics.atlasPacker = renderSettingsStorage.renderSettingsAtlasPacker;",
-            "        ");
     }
 
-    static void AddRenderPacker(BakeryLinuxPatchFile f, string anchor, string indent)
+    static bool RemoveRenderLightmapXatlasFallbacks(BakeryLinuxPatchFile f)
     {
-        string block = "#if UNITY_EDITOR_LINUX" + f.NewLine +
-                       indent + "if (ftBuildGraphics.atlasPacker == ftGlobalStorage.AtlasPacker.xatlas) ftBuildGraphics.atlasPacker = ftGlobalStorage.AtlasPacker.Default;" + f.NewLine +
-                       "#endif";
-        f.InsertAfter(anchor, block);
+        return f.ReplaceRegex(
+            @"(?m)^[ \t]*#if UNITY_EDITOR_LINUX\r?\n[ \t]*if \(ftBuildGraphics\.atlasPacker == ftGlobalStorage\.AtlasPacker\.xatlas\) ftBuildGraphics\.atlasPacker = ftGlobalStorage\.AtlasPacker\.Default;\r?\n[ \t]*#endif\r?\n",
+            m => string.Empty,
+            false);
     }
 }

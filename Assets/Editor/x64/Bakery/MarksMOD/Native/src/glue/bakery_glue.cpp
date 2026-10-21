@@ -732,24 +732,6 @@ int uvrLoad(const float*, int, const int*, int) { return 0; }
 int uvrRepack(float, int) { return 0; }
 int uvrUnload() { return 0; }
 
-void* xatlasCreateAtlas()
-{
-    std::fprintf(stderr, "bakery_glue: xatlasCreateAtlas not implemented\n");
-    return nullptr;
-}
-
-int xatlasAddMesh(void*, int, const void*, const void*, const void*, int, const int*) { return 0; }
-int xatlasAddUVMesh(void*, int, const void*, int, const int*, ft_bool) { return 0; }
-void xatlasParametrize(void*) {}
-void xatlasPack(void*, int, float, int, int, int, ft_bool, ft_bool) {}
-void xatlasNormalize(void*, const int*, ft_bool) {}
-int xatlasGetAtlasCount(void*) { return 0; }
-int xatlasGetAtlasIndex(void*, int, int) { return 0; }
-int xatlasGetVertexCount(void*, int) { return 0; }
-int xatlasGetIndexCount(void*, int) { return 0; }
-void xatlasGetData(void*, int, void*, void*, void*) {}
-int xatlasClear(void*) { return 0; }
-
 int ExtractZIP(const ft_wide*, int, const ft_utf8*, const ft_wide*)
 {
     std::fprintf(stderr, "bakery_glue: ExtractZIP not implemented\n");

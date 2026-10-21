@@ -1,0 +1,17 @@
+{
+  global:
+    xatlasCreateAtlas;
+    xatlasAddMesh;
+    xatlasAddUVMesh;
+    xatlasParametrize;
+    xatlasPack;
+    xatlasNormalize;
+    xatlasGetAtlasCount;
+    xatlasGetAtlasIndex;
+    xatlasGetVertexCount;
+    xatlasGetIndexCount;
+    xatlasGetData;
+    xatlasClear;
+  local:
+    *;
+};
