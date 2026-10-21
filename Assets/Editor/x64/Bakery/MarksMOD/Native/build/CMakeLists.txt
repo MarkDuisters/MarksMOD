@@ -15,9 +15,10 @@ set(BAKERY_LIB_DIR "${BAKERY_ROOT}/dist~/lib")
 set(BAKERY_BIN_DIR "${BAKERY_ROOT}/dist~/bin")
 
 if(BAKERY_BUILD_GLUE)
+  find_library(LZ4_LIBRARY NAMES lz4 REQUIRED)
   add_library(bakery_glue SHARED "${BAKERY_ROOT}/src/glue/bakery_glue.cpp")
   target_include_directories(bakery_glue PUBLIC "${BAKERY_ROOT}/src/glue")
-  target_link_libraries(bakery_glue PRIVATE pthread)
+  target_link_libraries(bakery_glue PRIVATE pthread ${LZ4_LIBRARY})
   set_target_properties(bakery_glue PROPERTIES
     OUTPUT_NAME bakery_glue
     LIBRARY_OUTPUT_DIRECTORY "${BAKERY_LIB_DIR}")

@@ -85,6 +85,21 @@ else
     bad "plugins missing (run: cmake --build build --target install-libs)"
 fi
 
+if [ -e "$plugins/libbakery_glue.so" ]; then
+    if command -v ldd >/dev/null 2>&1; then
+        glue_ldd="$(ldd "$plugins/libbakery_glue.so" 2>/dev/null || true)"
+        if printf '%s' "$glue_ldd" | grep -q 'liblz4\.so\.1 => not found'; then
+            bad "liblz4.so.1 missing (runtime dependency of libbakery_glue.so)"
+        elif printf '%s' "$glue_ldd" | grep -q 'liblz4\.so\.1 =>'; then
+            ok "liblz4.so.1 resolved: $(printf '%s' "$glue_ldd" | grep -m1 'liblz4\.so\.1 =>' | sed 's/^[[:space:]]*//')"
+        else
+            warn "liblz4.so.1 not referenced by libbakery_glue.so (static/vendored?)"
+        fi
+    else
+        warn "ldd not found; cannot verify liblz4.so.1"
+    fi
+fi
+
 nvidia_libs_version="${BAKERY_NVIDIA_LIBS_VERSION:-v1.0.2}"
 nvidia_libs_dir="${BAKERY_NVIDIA_LIBS_DIR:-$BAKERY_WINE_ROOT/nvidia-libs/nvidia-libs-$nvidia_libs_version}"
 if [ -f "$nvidia_libs_dir/bin/cudatest.exe" ]; then

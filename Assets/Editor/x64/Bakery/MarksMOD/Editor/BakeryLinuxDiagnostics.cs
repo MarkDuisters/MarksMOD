@@ -71,8 +71,28 @@ public static class BakeryLinuxDiagnostics
             BakeryLinuxSetup.SetupComplete ? "bootstrap completed" : "run Setup Wine Environment");
 
         string libs = BakeryToolPaths.LibrariesDirectory;
-        Add(list, "libbakery_glue.so", File.Exists(Path.Combine(libs, "libbakery_glue.so")) ? BakeryCheckStatus.Ok : BakeryCheckStatus.Warn, libs);
+        string glue = Path.Combine(libs, "libbakery_glue.so");
+        Add(list, "libbakery_glue.so", File.Exists(glue) ? BakeryCheckStatus.Ok : BakeryCheckStatus.Warn, libs);
         Add(list, "libfrender.so", File.Exists(Path.Combine(libs, "libfrender.so")) ? BakeryCheckStatus.Ok : BakeryCheckStatus.Warn, libs);
+
+        if (File.Exists(glue))
+        {
+            string ldd = Capture("ldd", "\"" + glue + "\"", 10000);
+            bool linked = !string.IsNullOrEmpty(ldd) && ldd.Contains("liblz4.so.1");
+            bool missing = !string.IsNullOrEmpty(ldd) && ldd.Contains("liblz4.so.1 => not found");
+            if (missing)
+            {
+                Add(list, "liblz4.so.1", BakeryCheckStatus.Fail, "missing runtime dependency of libbakery_glue.so");
+            }
+            else if (linked)
+            {
+                Add(list, "liblz4.so.1", BakeryCheckStatus.Ok, "resolved by libbakery_glue.so");
+            }
+            else
+            {
+                Add(list, "liblz4.so.1", BakeryCheckStatus.Warn, "not referenced by libbakery_glue.so (static/vendored?)");
+            }
+        }
 
         string host = Path.Combine(BakeryToolPaths.HostDirectory, "bakery_wine_host.exe");
         Add(list, "Wine host", File.Exists(host) ? BakeryCheckStatus.Ok : BakeryCheckStatus.Warn, host);

@@ -1,15 +1,19 @@
 #include "abi.h"
 
 #include <cerrno>
+#include <climits>
+#include <cmath>
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
 #include <string>
+#include <vector>
 #include <sys/wait.h>
 #include <signal.h>
 #include <unistd.h>
 
 #include <dlfcn.h>
+#include <lz4.h>
 
 namespace {
 
@@ -160,6 +164,479 @@ Proc* spawn(const LaunchSpec& spec)
     return p;
 }
 
+uint16_t read_u16(const uint8_t* p)
+{
+    return (uint16_t)((uint16_t)p[0] | ((uint16_t)p[1] << 8));
+}
+
+uint32_t read_u32(const uint8_t* p)
+{
+    return (uint32_t)p[0] | ((uint32_t)p[1] << 8) | ((uint32_t)p[2] << 16) | ((uint32_t)p[3] << 24);
+}
+
+bool has_lz4_extension(const std::string& path)
+{
+    if (path.size() < 4) return false;
+    size_t n = path.size();
+    return path[n - 4] == '.' &&
+           (path[n - 3] == 'l' || path[n - 3] == 'L') &&
+           (path[n - 2] == 'z' || path[n - 2] == 'Z') &&
+           (path[n - 1] == '4');
+}
+
+bool read_binary_file(const std::string& path, std::vector<uint8_t>& out)
+{
+    std::FILE* f = std::fopen(path.c_str(), "rb");
+    if (!f) return false;
+    std::fseek(f, 0, SEEK_END);
+    long long size = std::ftell(f);
+    if (size < 0) { std::fclose(f); return false; }
+    std::fseek(f, 0, SEEK_SET);
+    out.resize((size_t)size);
+    bool ok = out.empty() || std::fread(out.data(), 1, out.size(), f) == out.size();
+    std::fclose(f);
+    return ok;
+}
+
+// Bakery's .lz4 container is a u32 decompressed size followed by one raw LZ4
+// block. The decompressed payload is a complete DDS file.
+bool read_texture_blob(const std::string& path, std::vector<uint8_t>& blob)
+{
+    if (!has_lz4_extension(path)) return read_binary_file(path, blob);
+
+    std::FILE* f = std::fopen(path.c_str(), "rb");
+    if (!f) return false;
+    uint8_t size_bytes[4];
+    if (std::fread(size_bytes, 1, 4, f) != 4) { std::fclose(f); return false; }
+    uint32_t decompressed_size = read_u32(size_bytes);
+    if (decompressed_size > (uint32_t)INT32_MAX) { std::fclose(f); return false; }
+
+    std::fseek(f, 0, SEEK_END);
+    long long file_size = std::ftell(f);
+    if (file_size < 4) { std::fclose(f); return false; }
+    std::fseek(f, 4, SEEK_SET);
+    std::vector<uint8_t> compressed((size_t)(file_size - 4));
+    bool ok = compressed.empty() || std::fread(compressed.data(), 1, compressed.size(), f) == compressed.size();
+    std::fclose(f);
+    if (!ok) return false;
+
+    blob.resize(decompressed_size);
+    int result = LZ4_decompress_safe((const char*)compressed.data(), (char*)blob.data(),
+                                     (int)compressed.size(), (int)decompressed_size);
+    return result == (int)decompressed_size;
+}
+
+enum class SourceFormat
+{
+    Unknown,
+    Half4,
+    Float4,
+    RGBA8,
+    RGB8,
+    R8,
+    R16,
+    RG16,
+    RGBA16,
+    R16F,
+    RG16F,
+    R32F,
+    RG32F,
+    RGB32F
+};
+
+struct Texture
+{
+    uint32_t width = 0;
+    uint32_t height = 0;
+    SourceFormat format = SourceFormat::Unknown;
+    int bytes_per_pixel = 0;
+    uint32_t rmask = 0;
+    uint32_t gmask = 0;
+    uint32_t bmask = 0;
+    uint32_t amask = 0;
+    size_t pixel_offset = 128;
+    std::vector<uint8_t> blob;
+
+    const uint8_t* pixels() const { return blob.data() + pixel_offset; }
+    size_t payload_size() const { return blob.size() - pixel_offset; }
+};
+
+void set_rgba8_masks(Texture& t, uint32_t r, uint32_t g, uint32_t b, uint32_t a)
+{
+    t.format = SourceFormat::RGBA8;
+    t.bytes_per_pixel = 4;
+    t.rmask = r;
+    t.gmask = g;
+    t.bmask = b;
+    t.amask = a;
+}
+
+bool parse_texture(const std::string& path, Texture& tex)
+{
+    if (!read_texture_blob(path, tex.blob)) return false;
+    if (tex.blob.size() < 128 || std::memcmp(tex.blob.data(), "DDS ", 4) != 0) return false;
+
+    const uint8_t* h = tex.blob.data();
+    tex.height = read_u32(h + 0x0c);
+    tex.width = read_u32(h + 0x10);
+    if (tex.width == 0 || tex.height == 0) return false;
+
+    uint32_t pf_flags = read_u32(h + 0x50);
+    uint32_t fourcc = read_u32(h + 0x54);
+    uint32_t bits = read_u32(h + 0x58);
+    tex.pixel_offset = 128;
+
+    const uint32_t DDPF_FOURCC = 0x4;
+    const uint32_t DDPF_RGB = 0x40;
+    const uint32_t DDPF_LUMINANCE = 0x20000;
+
+    if (fourcc == 0x30315844) // "DX10"
+    {
+        if (tex.blob.size() < 148) return false;
+        uint32_t dxgi = read_u32(h + 0x80);
+        tex.pixel_offset = 148;
+        switch (dxgi)
+        {
+        case 2:  tex.format = SourceFormat::Float4;  tex.bytes_per_pixel = 16; break;
+        case 6:  tex.format = SourceFormat::RGB32F;  tex.bytes_per_pixel = 12; break;
+        case 10: tex.format = SourceFormat::Half4;   tex.bytes_per_pixel = 8; break;
+        case 11: tex.format = SourceFormat::RGBA16;  tex.bytes_per_pixel = 8; break;
+        case 16: tex.format = SourceFormat::RG32F;   tex.bytes_per_pixel = 8; break;
+        case 28:
+        case 29: set_rgba8_masks(tex, 0x000000ff, 0x0000ff00, 0x00ff0000, 0xff000000); break;
+        case 34: tex.format = SourceFormat::RG16F;   tex.bytes_per_pixel = 4; break;
+        case 41: tex.format = SourceFormat::R32F;    tex.bytes_per_pixel = 4; break;
+        case 54: tex.format = SourceFormat::R16F;    tex.bytes_per_pixel = 2; break;
+        case 60:
+        case 61: tex.format = SourceFormat::R8;      tex.bytes_per_pixel = 1; break;
+        case 87:
+        case 88: set_rgba8_masks(tex, 0x00ff0000, 0x0000ff00, 0x000000ff, 0xff000000); break;
+        default: return false;
+        }
+    }
+    else if (pf_flags & DDPF_FOURCC)
+    {
+        switch (fourcc)
+        {
+        case 111: tex.format = SourceFormat::R16F;  tex.bytes_per_pixel = 2; break;
+        case 112: tex.format = SourceFormat::RG16F; tex.bytes_per_pixel = 4; break;
+        case 113: tex.format = SourceFormat::Half4; tex.bytes_per_pixel = 8; break;
+        case 114: tex.format = SourceFormat::R32F;  tex.bytes_per_pixel = 4; break;
+        case 115: tex.format = SourceFormat::RG32F; tex.bytes_per_pixel = 8; break;
+        case 116: tex.format = SourceFormat::Float4; tex.bytes_per_pixel = 16; break;
+        case 36:  tex.format = SourceFormat::RGBA16; tex.bytes_per_pixel = 8; break;
+        default: return false;
+        }
+    }
+    else if (pf_flags & DDPF_RGB)
+    {
+        uint32_t r = read_u32(h + 0x5c);
+        uint32_t g = read_u32(h + 0x60);
+        uint32_t b = read_u32(h + 0x64);
+        uint32_t a = read_u32(h + 0x68);
+        if (bits == 32)
+        {
+            set_rgba8_masks(tex, r, g, b, a);
+        }
+        else if (bits == 24)
+        {
+            tex.format = SourceFormat::RGB8;
+            tex.bytes_per_pixel = 3;
+            tex.rmask = r; tex.gmask = g; tex.bmask = b;
+        }
+        else if (bits == 16)
+        {
+            tex.format = SourceFormat::RG16;
+            tex.bytes_per_pixel = 2;
+            tex.rmask = r; tex.gmask = g; tex.bmask = b; tex.amask = a;
+        }
+        else
+        {
+            return false;
+        }
+    }
+    else if (pf_flags & DDPF_LUMINANCE)
+    {
+        if (bits == 8) { tex.format = SourceFormat::R8; tex.bytes_per_pixel = 1; }
+        else if (bits == 16) { tex.format = SourceFormat::R16; tex.bytes_per_pixel = 2; }
+        else return false;
+    }
+    else
+    {
+        return false;
+    }
+
+    size_t needed = (size_t)tex.width * (size_t)tex.height * (size_t)tex.bytes_per_pixel;
+    if (tex.pixel_offset + needed > tex.blob.size()) return false;
+    return true;
+}
+
+inline float half_to_float(uint16_t value)
+{
+    uint32_t sign = ((uint32_t)value & 0x8000u) << 16;
+    uint32_t exponent = ((uint32_t)value >> 10) & 0x1Fu;
+    uint32_t mantissa = (uint32_t)value & 0x3FFu;
+    uint32_t bits;
+    if (exponent == 0)
+    {
+        if (mantissa == 0)
+        {
+            bits = sign;
+        }
+        else
+        {
+            int shift = 0;
+            while ((mantissa & 0x400u) == 0) { mantissa <<= 1; ++shift; }
+            mantissa &= 0x3FFu;
+            uint32_t exp = (uint32_t)(113 - shift);
+            bits = sign | (exp << 23) | (mantissa << 13);
+        }
+    }
+    else if (exponent == 31)
+    {
+        bits = sign | 0x7F800000u | (mantissa << 13);
+    }
+    else
+    {
+        bits = sign | ((exponent + 112u) << 23) | (mantissa << 13);
+    }
+    float result;
+    std::memcpy(&result, &bits, sizeof(result));
+    return result;
+}
+
+inline float read_float(const uint8_t* p)
+{
+    float v;
+    std::memcpy(&v, p, sizeof(v));
+    return v;
+}
+
+inline float mask_channel(uint32_t value, uint32_t mask, float missing)
+{
+    if (mask == 0) return missing;
+    int shift = 0;
+    while (((mask >> shift) & 1u) == 0) ++shift;
+    uint32_t max_value = mask >> shift;
+    uint32_t component = (value & mask) >> shift;
+    return (float)component * (1.0f / (float)max_value);
+}
+
+bool decode_pixel(const Texture& tex, size_t index, float out[4])
+{
+    const uint8_t* pixels = tex.pixels();
+    switch (tex.format)
+    {
+    case SourceFormat::Half4:
+    {
+        const uint8_t* p = pixels + index * 8;
+        out[0] = half_to_float(read_u16(p + 0));
+        out[1] = half_to_float(read_u16(p + 2));
+        out[2] = half_to_float(read_u16(p + 4));
+        out[3] = half_to_float(read_u16(p + 6));
+        return true;
+    }
+    case SourceFormat::Float4:
+    {
+        const uint8_t* p = pixels + index * 16;
+        out[0] = read_float(p + 0);
+        out[1] = read_float(p + 4);
+        out[2] = read_float(p + 8);
+        out[3] = read_float(p + 12);
+        return true;
+    }
+    case SourceFormat::RGB32F:
+    {
+        const uint8_t* p = pixels + index * 12;
+        out[0] = read_float(p + 0);
+        out[1] = read_float(p + 4);
+        out[2] = read_float(p + 8);
+        out[3] = 1.0f;
+        return true;
+    }
+    case SourceFormat::RGBA16:
+    {
+        const uint8_t* p = pixels + index * 8;
+        out[0] = (float)read_u16(p + 0) * (1.0f / 65535.0f);
+        out[1] = (float)read_u16(p + 2) * (1.0f / 65535.0f);
+        out[2] = (float)read_u16(p + 4) * (1.0f / 65535.0f);
+        out[3] = (float)read_u16(p + 6) * (1.0f / 65535.0f);
+        return true;
+    }
+    case SourceFormat::RGBA8:
+    {
+        uint32_t value = read_u32(pixels + index * 4);
+        out[0] = mask_channel(value, tex.rmask, 0.0f);
+        out[1] = mask_channel(value, tex.gmask, 0.0f);
+        out[2] = mask_channel(value, tex.bmask, 0.0f);
+        out[3] = mask_channel(value, tex.amask, 1.0f);
+        return true;
+    }
+    case SourceFormat::RGB8:
+    {
+        const uint8_t* p = pixels + index * 3;
+        uint32_t value = (uint32_t)p[0] | ((uint32_t)p[1] << 8) | ((uint32_t)p[2] << 16);
+        out[0] = mask_channel(value, tex.rmask, 0.0f);
+        out[1] = mask_channel(value, tex.gmask, 0.0f);
+        out[2] = mask_channel(value, tex.bmask, 0.0f);
+        out[3] = 1.0f;
+        return true;
+    }
+    case SourceFormat::R8:
+        out[0] = (float)pixels[index] * (1.0f / 255.0f);
+        out[1] = 0.0f;
+        out[2] = 0.0f;
+        out[3] = 1.0f;
+        return true;
+    case SourceFormat::R16:
+        out[0] = (float)read_u16(pixels + index * 2) * (1.0f / 65535.0f);
+        out[1] = 0.0f;
+        out[2] = 0.0f;
+        out[3] = 1.0f;
+        return true;
+    case SourceFormat::RG16:
+    {
+        const uint8_t* p = pixels + index * 2;
+        uint32_t value = read_u16(p);
+        out[0] = mask_channel(value, tex.rmask, 0.0f);
+        out[1] = mask_channel(value, tex.gmask, 0.0f);
+        out[2] = mask_channel(value, tex.bmask, 0.0f);
+        out[3] = mask_channel(value, tex.amask, 1.0f);
+        return true;
+    }
+    case SourceFormat::R16F:
+        out[0] = half_to_float(read_u16(pixels + index * 2));
+        out[1] = 0.0f;
+        out[2] = 0.0f;
+        out[3] = 1.0f;
+        return true;
+    case SourceFormat::RG16F:
+    {
+        const uint8_t* p = pixels + index * 4;
+        out[0] = half_to_float(read_u16(p + 0));
+        out[1] = half_to_float(read_u16(p + 2));
+        out[2] = 0.0f;
+        out[3] = 1.0f;
+        return true;
+    }
+    case SourceFormat::R32F:
+        out[0] = read_float(pixels + index * 4);
+        out[1] = 0.0f;
+        out[2] = 0.0f;
+        out[3] = 1.0f;
+        return true;
+    case SourceFormat::RG32F:
+    {
+        const uint8_t* p = pixels + index * 8;
+        out[0] = read_float(p + 0);
+        out[1] = read_float(p + 4);
+        out[2] = 0.0f;
+        out[3] = 1.0f;
+        return true;
+    }
+    default:
+        return false;
+    }
+}
+
+inline uint8_t unorm8_from_float(float value)
+{
+    float scaled = value * 255.0f;
+    float clamped = fminf(255.0f, scaled);
+    return (uint8_t)(int)clamped;
+}
+
+void encode_rgbm(const float rgba[4], float multiplier, uint8_t out[4])
+{
+    float r = rgba[0];
+    float g = rgba[1];
+    float b = rgba[2];
+    if (multiplier != 1.0f)
+    {
+        r *= multiplier;
+        g *= multiplier;
+        b *= multiplier;
+    }
+    float vr = sqrtf(r) * 0.125f;
+    float vg = sqrtf(g) * 0.125f;
+    float vb = sqrtf(b) * 0.125f;
+
+    float m = fmaxf(fmaxf(vr, vg), vb);
+    m = fmaxf(m, 1.0f / 255.0f);
+    m = fminf(1.0f, m);
+    m = ceilf(m * 255.0f) / 255.0f;
+    float inv = 1.0f / m;
+
+    out[0] = unorm8_from_float(vr * inv);
+    out[1] = unorm8_from_float(vg * inv);
+    out[2] = unorm8_from_float(vb * inv);
+    out[3] = unorm8_from_float(m);
+}
+
+int convert_texture(const std::string& input, void* values, int data_type, float multiplier)
+{
+    if (!values)
+    {
+        std::fprintf(stderr, "bakery_glue: halffloat2vb: null output buffer\n");
+        return 23;
+    }
+
+    Texture tex;
+    if (!parse_texture(input, tex))
+    {
+        std::fprintf(stderr, "bakery_glue: halffloat2vb: can't read texture %s\n", input.c_str());
+        return 23;
+    }
+
+    const size_t pixel_count = (size_t)tex.width * (size_t)tex.height;
+    uint8_t* dst = (uint8_t*)values;
+
+    switch (data_type)
+    {
+    case 0: // DATATYPE_RGBA16ASRGBM
+    {
+        for (size_t i = 0; i < pixel_count; ++i)
+        {
+            float rgba[4];
+            if (!decode_pixel(tex, i, rgba)) return 4;
+            encode_rgbm(rgba, multiplier, dst + i * 4);
+        }
+        return 0;
+    }
+    case 1: // DATATYPE_RGBA8 - raw payload copy (matches the Windows DLL)
+        if (tex.payload_size() < pixel_count * 4) return 2;
+        std::memcpy(dst, tex.pixels(), pixel_count * 4);
+        return 0;
+    case 2: // DATATYPE_RGBA16ASRGBA32
+    {
+        for (size_t i = 0; i < pixel_count; ++i)
+        {
+            float rgba[4];
+            if (!decode_pixel(tex, i, rgba)) return 4;
+            if (multiplier != 1.0f)
+            {
+                rgba[0] *= multiplier;
+                rgba[1] *= multiplier;
+                rgba[2] *= multiplier;
+                rgba[3] *= multiplier;
+            }
+            std::memcpy(dst + i * 16, rgba, 16);
+        }
+        return 0;
+    }
+    case 3: // DATATYPE_R8 - raw payload copy
+        if (tex.payload_size() < pixel_count) return 2;
+        std::memcpy(dst, tex.pixels(), pixel_count);
+        return 0;
+    case 4: // DATATYPE_RGBA32 - raw payload copy
+        if (tex.payload_size() < pixel_count * 16) return 2;
+        std::memcpy(dst, tex.pixels(), pixel_count * 16);
+        return 0;
+    default:
+        return 4;
+    }
+}
+
 }
 
 extern "C" {
@@ -239,16 +716,16 @@ int GetClassName(void*, ft_utf8* text, int count)
     return 0;
 }
 
-int halffloat2vb(const ft_wide*, void*, int)
+int halffloat2vb(const ft_wide* inputFilename, void* values, int dataType)
 {
-    std::fprintf(stderr, "bakery_glue: halffloat2vb not implemented\n");
-    return -1;
+    if (!inputFilename) return 23;
+    return convert_texture(to_utf8(inputFilename), values, dataType, 1.0f);
 }
 
-int halffloat2vbm(const ft_wide*, void*, int, float)
+int halffloat2vbm(const ft_wide* inputFilename, void* values, int dataType, float multiplier)
 {
-    std::fprintf(stderr, "bakery_glue: halffloat2vbm not implemented\n");
-    return -1;
+    if (!inputFilename) return 23;
+    return convert_texture(to_utf8(inputFilename), values, dataType, multiplier);
 }
 
 int uvrLoad(const float*, int, const int*, int) { return 0; }

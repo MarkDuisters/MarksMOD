@@ -22,12 +22,27 @@ public static class BakeryProgress
     static string lastMessage = "";
     static float lastPercent;
 
+    public static int ShowCount { get; private set; }
+    public static int EndCount { get; private set; }
+
+    public static bool IsShown
+    {
+        get { return shown; }
+    }
+
+    public static void ResetTestCounters()
+    {
+        ShowCount = 0;
+        EndCount = 0;
+    }
+
     public static void Show(string header, string msg, float percent, float step, bool onTop)
     {
         lastHeader = header;
         lastMessage = msg;
         lastPercent = Mathf.Clamp01(percent);
         shown = true;
+        ShowCount++;
 
 #if UNITY_EDITOR_WIN
         simpleProgressBarShow(header, msg, percent, step, onTop);
@@ -57,6 +72,7 @@ public static class BakeryProgress
 
     public static void End()
     {
+        EndCount++;
 #if UNITY_EDITOR_WIN
         simpleProgressBarEnd();
 #else

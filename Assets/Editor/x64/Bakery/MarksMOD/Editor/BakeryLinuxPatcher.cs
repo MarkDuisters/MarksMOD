@@ -8,7 +8,7 @@ using UnityEngine;
 
 public static class BakeryLinuxPatcher
 {
-    public const int PatchVersion = 1;
+    public const int PatchVersion = 5;
 
     static readonly string[] Targets =
     {
@@ -17,8 +17,15 @@ public static class BakeryLinuxPatcher
         "ftDetectSettings.cs",
         "ftUpdater.cs",
         "ftBuildGraphics.cs",
-        "ftRenderLightmap.cs"
+        "ftRenderLightmap.cs",
+        "ftModelPostProcessor.cs",
+        "ftClearCache.cs"
     };
+
+    public static IReadOnlyList<string> PatchTargets
+    {
+        get { return Targets; }
+    }
 
     public class PatchResult
     {
@@ -54,10 +61,15 @@ public static class BakeryLinuxPatcher
 
     public static PatchResult Apply()
     {
+        return ApplyTo(ScriptsDirectory, BackupDirectory);
+    }
+
+    public static PatchResult ApplyTo(string scriptsDirectory, string backupDirectory)
+    {
         var result = new PatchResult();
-        if (!Directory.Exists(ScriptsDirectory))
+        if (!Directory.Exists(scriptsDirectory))
         {
-            result.Errors.Add("Bakery scripts directory not found: " + ScriptsDirectory);
+            result.Errors.Add("Bakery scripts directory not found: " + scriptsDirectory);
             return result;
         }
 
@@ -65,7 +77,7 @@ public static class BakeryLinuxPatcher
 
         foreach (var name in Targets)
         {
-            string path = Path.Combine(ScriptsDirectory, name);
+            string path = Path.Combine(scriptsDirectory, name);
             if (!File.Exists(path))
             {
                 result.Errors.Add(name + ": file not found");
@@ -126,8 +138,8 @@ public static class BakeryLinuxPatcher
         {
             try
             {
-                Directory.CreateDirectory(BackupDirectory);
-                string backup = Path.Combine(BackupDirectory, Path.GetFileName(pair.Key) + "." + DateTime.Now.ToString("yyyyMMdd-HHmmss") + ".bak");
+                Directory.CreateDirectory(backupDirectory);
+                string backup = Path.Combine(backupDirectory, Path.GetFileName(pair.Key) + "." + DateTime.Now.ToString("yyyyMMdd-HHmmss") + ".bak");
                 File.Copy(pair.Key, backup, true);
                 File.WriteAllText(pair.Key, pair.Value, new UTF8Encoding(false));
                 result.Changed = true;
@@ -138,7 +150,7 @@ public static class BakeryLinuxPatcher
             }
         }
 
-        if (result.Errors.Count == 0 && result.Changed)
+        if (result.Errors.Count == 0 && result.Changed && IsInsideProject(scriptsDirectory))
         {
             AssetDatabase.Refresh(ImportAssetOptions.ForceUpdate);
             AssetDatabase.SaveAssets();
@@ -150,16 +162,21 @@ public static class BakeryLinuxPatcher
 
     public static PatchResult Restore()
     {
+        return RestoreFrom(ScriptsDirectory, BackupDirectory);
+    }
+
+    public static PatchResult RestoreFrom(string scriptsDirectory, string backupDirectory)
+    {
         var result = new PatchResult();
-        if (!Directory.Exists(BackupDirectory))
+        if (!Directory.Exists(backupDirectory))
         {
-            result.Errors.Add("No patch backups found: " + BackupDirectory);
+            result.Errors.Add("No patch backups found: " + backupDirectory);
             return result;
         }
 
         foreach (var name in Targets)
         {
-            string[] backups = Directory.GetFiles(BackupDirectory, name + ".*.bak");
+            string[] backups = Directory.GetFiles(backupDirectory, name + ".*.bak");
             if (backups.Length == 0)
             {
                 result.Errors.Add(name + ": no backup");
@@ -170,7 +187,7 @@ public static class BakeryLinuxPatcher
             string latest = backups[backups.Length - 1];
             try
             {
-                File.Copy(latest, Path.Combine(ScriptsDirectory, name), true);
+                File.Copy(latest, Path.Combine(scriptsDirectory, name), true);
                 result.Messages.Add(name + ": restored from " + Path.GetFileName(latest));
                 result.Changed = true;
             }
@@ -180,7 +197,7 @@ public static class BakeryLinuxPatcher
             }
         }
 
-        if (result.Errors.Count == 0 && result.Changed)
+        if (result.Errors.Count == 0 && result.Changed && IsInsideProject(scriptsDirectory))
         {
             AssetDatabase.Refresh(ImportAssetOptions.ForceUpdate);
             AssetDatabase.SaveAssets();
@@ -188,6 +205,13 @@ public static class BakeryLinuxPatcher
 
         result.Success = result.Errors.Count == 0;
         return result;
+    }
+
+    static bool IsInsideProject(string directory)
+    {
+        string root = Path.GetDirectoryName(Application.dataPath);
+        string full = Path.GetFullPath(directory);
+        return full.StartsWith(Path.GetFullPath(root) + Path.DirectorySeparatorChar, StringComparison.Ordinal);
     }
 }
 #endif
