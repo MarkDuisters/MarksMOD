@@ -42,6 +42,7 @@ public static class BakeryLinuxHost
         CopyEnv(psi, "BAKERY_RUNNER");
         CopyEnv(psi, "DXVK_CONFIG");
         CopyEnv(psi, "VK_ICD_FILENAMES");
+        CopyEnv(psi, "WINEDLLOVERRIDES");
 
         try
         {

@@ -61,6 +61,62 @@ const char* env_or(const char* name, const char* fallback)
     return (v && *v) ? v : fallback;
 }
 
+void set_default_env(const char* name, const char* value)
+{
+    const char* v = std::getenv(name);
+    if (!v || !*v) setenv(name, value, 1);
+}
+
+std::string default_wine_prefix()
+{
+    const char* configured = std::getenv("BAKERY_WINEPREFIX");
+    if (configured && *configured) return configured;
+    const char* home = std::getenv("HOME");
+    if (home && *home) return std::string(home) + "/.local/share/bakery/wineprefix";
+    return std::string();
+}
+
+void configure_wine_tool_environment()
+{
+    std::string prefix = default_wine_prefix();
+    if (!prefix.empty()) setenv("WINEPREFIX", prefix.c_str(), 1);
+
+    set_default_env("DXVK_CONFIG", "dxgi.hideNvidiaGpu = False");
+
+    if (!std::getenv("VK_ICD_FILENAMES"))
+    {
+        const char* icdPaths[] =
+        {
+            "/usr/share/vulkan/icd.d/nvidia_icd.json",
+            "/etc/vulkan/icd.d/nvidia_icd.json",
+            "/usr/share/vulkan/icd.d/nvidia_icd.x86_64.json"
+        };
+        for (const char* path : icdPaths)
+        {
+            if (access(path, R_OK) == 0)
+            {
+                setenv("VK_ICD_FILENAMES", path, 1);
+                break;
+            }
+        }
+    }
+
+    std::string overrides = env_or("WINEDLLOVERRIDES", "");
+    const char* entries[] = { "d3d11=n,b", "dxgi=n,b", "d3dcompiler_47=n,b" };
+    for (const char* entry : entries)
+    {
+        std::string key(entry);
+        size_t eq = key.find('=');
+        if (eq != std::string::npos) key.resize(eq);
+        if (overrides.find(key + "=") == std::string::npos)
+        {
+            if (!overrides.empty()) overrides += ";";
+            overrides += entry;
+        }
+    }
+    if (!overrides.empty()) setenv("WINEDLLOVERRIDES", overrides.c_str(), 1);
+}
+
 std::string library_dir()
 {
     Dl_info info;
@@ -150,8 +206,7 @@ Proc* spawn(const LaunchSpec& spec)
     {
         if (!spec.cwd.empty()) chdir(spec.cwd.c_str());
 
-        const char* prefix = std::getenv("BAKERY_WINEPREFIX");
-        if (prefix && *prefix) setenv("WINEPREFIX", prefix, 1);
+        configure_wine_tool_environment();
 
         execl("/bin/sh", "sh", "-c", spec.command.c_str(), (char*)nullptr);
         _exit(127);

@@ -6,6 +6,7 @@ PREFIX="${BAKERY_WINEPREFIX:-$BAKERY_WINE_ROOT/wineprefix}"
 SYS32="$PREFIX/drive_c/windows/system32"
 
 export DXVK_CONFIG="${DXVK_CONFIG:-dxgi.hideNvidiaGpu = False}"
+export WINEDLLOVERRIDES="${WINEDLLOVERRIDES:-d3d11=n,b;dxgi=n,b;d3dcompiler_47=n,b}"
 for icd in /usr/share/vulkan/icd.d/nvidia_icd.json /etc/vulkan/icd.d/nvidia_icd.json /usr/share/vulkan/icd.d/nvidia_icd.x86_64.json; do
     if [ -f "$icd" ]; then
         export VK_ICD_FILENAMES="${VK_ICD_FILENAMES:-$icd}"

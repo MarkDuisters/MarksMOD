@@ -18,6 +18,7 @@ public static class BakeryProgress
 
     static bool shown;
     static bool cancelled;
+    static bool cancelRequested;
     static string lastHeader = "Bakery";
     static string lastMessage = "";
     static float lastPercent;
@@ -28,6 +29,31 @@ public static class BakeryProgress
     public static bool IsShown
     {
         get { return shown; }
+    }
+
+    public static string Header
+    {
+        get { return lastHeader; }
+    }
+
+    public static string Message
+    {
+        get { return lastMessage; }
+    }
+
+    public static float Percent
+    {
+        get { return lastPercent; }
+    }
+
+    public static bool CancelRequested
+    {
+        get { return cancelRequested; }
+    }
+
+    public static void RequestCancel()
+    {
+        cancelRequested = true;
     }
 
     public static void ResetTestCounters()
@@ -48,7 +74,7 @@ public static class BakeryProgress
         simpleProgressBarShow(header, msg, percent, step, onTop);
         cancelled = simpleProgressBarCancelled();
 #else
-        cancelled = EditorUtility.DisplayCancelableProgressBar(header, msg, lastPercent);
+        BakeryProgressWindow.ShowOrUpdate();
 #endif
     }
 
@@ -59,7 +85,7 @@ public static class BakeryProgress
 #if UNITY_EDITOR_WIN
             cancelled = simpleProgressBarCancelled();
 #else
-            if (shown) cancelled = EditorUtility.DisplayCancelableProgressBar(lastHeader, lastMessage, lastPercent);
+            cancelled = cancelRequested;
 #endif
             return cancelled;
         }
@@ -68,6 +94,7 @@ public static class BakeryProgress
     public static void Reset()
     {
         cancelled = false;
+        cancelRequested = false;
     }
 
     public static void End()
@@ -76,7 +103,7 @@ public static class BakeryProgress
 #if UNITY_EDITOR_WIN
         simpleProgressBarEnd();
 #else
-        if (shown) EditorUtility.ClearProgressBar();
+        if (shown) BakeryProgressWindow.Hide();
 #endif
         shown = false;
         cancelled = false;

@@ -34,6 +34,17 @@ public static class BakeryLinuxBootstrap
             if (icd != null) Environment.SetEnvironmentVariable("VK_ICD_FILENAMES", icd);
         }
 
+        var dllOverrides = Environment.GetEnvironmentVariable("WINEDLLOVERRIDES");
+        const string requiredOverrides = "d3d11=n,b;dxgi=n,b;d3dcompiler_47=n,b";
+        if (string.IsNullOrEmpty(dllOverrides))
+        {
+            Environment.SetEnvironmentVariable("WINEDLLOVERRIDES", requiredOverrides);
+        }
+        else if (!dllOverrides.Contains("d3d11=") || !dllOverrides.Contains("dxgi=") || !dllOverrides.Contains("d3dcompiler_47="))
+        {
+            Environment.SetEnvironmentVariable("WINEDLLOVERRIDES", dllOverrides + ";" + requiredOverrides);
+        }
+
         if (string.IsNullOrEmpty(Environment.GetEnvironmentVariable("BAKERY_WINEPREFIX")))
         {
             Environment.SetEnvironmentVariable("BAKERY_WINEPREFIX", BakeryLinuxSetup.PrefixPath);
@@ -47,11 +58,6 @@ public static class BakeryLinuxBootstrap
         if (!BakeryLinuxPatcher.IsPatched)
         {
             Debug.LogWarning("[Bakery] MarksMOD patches are not applied. Open Bakery/MarksMOD/Setup Wizard and click Patch Bakery.");
-        }
-
-        if (BakeryLinuxSetup.SetupComplete)
-        {
-            BakeryLinuxHost.ScheduleStart();
         }
 
         BakeryLinuxSetup.ScheduleStartupCheck();

@@ -1,5 +1,7 @@
 # MarksMOD - Bakery Linux compatibility layer
 
+Version: 0.02
+
 MarksMOD adds a Linux/Wine compatibility layer to an existing Bakery installation. It does not contain Bakery itself and does not include Bakery addon files.
 
 ## Requirements
@@ -19,7 +21,7 @@ MarksMOD adds a Linux/Wine compatibility layer to an existing Bakery installatio
 
 `Restore Bakery` reverts the patched Bakery scripts from the stored backups.
 
-The current patcher version is 6 and targets eight Bakery files.
+The current patcher version is 10 and targets eight Bakery files.
 
 ## Tested scope
 
@@ -47,4 +49,7 @@ The tested path is Linux + NVIDIA + URP + RTX9 (ftraceRTX9). The test suite cove
 
 - The prebuilt `bakery_wine_host.exe` is included under `MarksMOD/Native/dist~/bin`.
 - The Linux plugin shims are provided under `Assets/Plugins/x86_64`.
+- D3D11 tools (seamfixer, denoisers, buffer generators) are launched through Wine with explicit DXVK DLL overrides and the configured Wine prefix.
+- The Wine host starts automatically when a bake begins and shuts down when the bake completes.
+- Bakery UI is left native: use Bakery's Experimental settings for the global Atlas Packer and the Lightmap Group asset inspector for per-group overrides.
 - Do not redistribute the Bakery addon or its native payload. Users must install Bakery themselves.

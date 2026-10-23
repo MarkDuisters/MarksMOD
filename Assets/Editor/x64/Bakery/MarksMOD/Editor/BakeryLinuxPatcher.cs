@@ -8,7 +8,7 @@ using UnityEngine;
 
 public static class BakeryLinuxPatcher
 {
-    public const int PatchVersion = 6;
+    public const int PatchVersion = 10;
 
     static readonly string[] Targets =
     {

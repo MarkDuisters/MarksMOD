@@ -116,6 +116,9 @@ public static class BakeryLinuxPatchRules
                 text.IndexOf("if (packer == ftGlobalStorage.AtlasPacker.xatlas) packer = ftGlobalStorage.AtlasPacker.Default;", StringComparison.Ordinal) < 0;
             case "ftRenderLightmap.cs": return text.IndexOf("BakeryProcess.RunLocalProcess", StringComparison.Ordinal) >= 0 &&
                 text.IndexOf("ResolveProbeLightingDataAssetPath", StringComparison.Ordinal) >= 0 &&
+                text.IndexOf("BakeryWineHost.EnsureStarted", StringComparison.Ordinal) >= 0 &&
+                text.IndexOf("EditorGUILayout.LabelField(\"Atlas packer\"", StringComparison.Ordinal) < 0 &&
+                text.IndexOf("lmname + \"_final_Dir\" + (compressedOutput ? \".lz4\" : \".dds\") + \"\\\"\"", StringComparison.Ordinal) >= 0 &&
                 text.IndexOf("if (ftBuildGraphics.atlasPacker == ftGlobalStorage.AtlasPacker.xatlas) ftBuildGraphics.atlasPacker = ftGlobalStorage.AtlasPacker.Default;", StringComparison.Ordinal) < 0;
             case "ftModelPostProcessor.cs": return text.IndexOf("BAKERY_TEST_DISABLE_IMPORT_UNWRAP", StringComparison.Ordinal) >= 0;
             case "ftClearCache.cs": return text.IndexOf("Path.GetTempPath()", StringComparison.Ordinal) >= 0 &&
@@ -256,6 +259,34 @@ public static class BakeryLinuxPatchRules
 
     static void PatchRenderLightmap(BakeryLinuxPatchFile f)
     {
+        f.Replace("lmname + \"_final_Dir\" + (compressedOutput ? \".lz4\" : \".dds\");",
+                  "lmname + \"_final_Dir\" + (compressedOutput ? \".lz4\" : \".dds\") + \"\\\"\";",
+                  false);
+
+        AddHostLifecycleRules(f);
+
+        f.Replace("if (settingsMode == SettingsMode.Advanced) scrollHeight += 160;",
+                  "if (settingsMode == SettingsMode.Advanced) scrollHeight += 100;",
+                  false);
+
+        f.ReplaceLines(
+@"        if (settingsMode >= SettingsMode.Advanced)
+        {
+            EditorGUILayout.Space();
+            EditorGUILayout.Space();
+            EditorGUILayout.Space();
+            EditorGUILayout.LabelField(""Atlas packer"", EditorStyles.boldLabel);
+            ftBuildGraphics.atlasPacker = (ftGlobalStorage.AtlasPacker)EditorGUILayout.EnumPopup(ftBuildGraphics.atlasPacker, opts);
+        }",
+@"        if (settingsMode == SettingsMode.Experimental)
+        {
+            EditorGUILayout.Space();
+            EditorGUILayout.Space();
+            EditorGUILayout.Space();
+            ftBuildGraphics.atlasPacker = (ftGlobalStorage.AtlasPacker)EditorGUILayout.EnumPopup(ftBuildGraphics.atlasPacker, opts);
+        }",
+            false);
+
         if (RemoveRenderLightmapXatlasFallbacks(f)) return;
 
         f.Replace("var exeProcess = RunLocalProcess(", "var exeProcess = BakeryProcess.RunLocalProcess(");
@@ -288,6 +319,9 @@ public static class BakeryLinuxPatchRules
                   "System.IO.Path.Combine(System.IO.Path.GetTempPath(), \"frender\")");
         f.ReplaceRegex(@"(scenePath\s*\+\s*)""\\\\", m => m.Groups[1].Value + "\"/", false);
 
+        bool hasProbeFixes = f.Text.IndexOf("HasValidLightingDataAsset", StringComparison.Ordinal) >= 0;
+        if (!hasProbeFixes)
+        {
         f.ReplaceLines(
 @"    public IEnumerator InitializeLightProbes(bool optional)
     {
@@ -537,7 +571,93 @@ public static class BakeryLinuxPatchRules
 #endif
 
         // Store lightmap flags");
+        }
+    }
 
+    static void AddHostLifecycleRules(BakeryLinuxPatchFile f)
+    {
+        string nl = f.NewLine;
+
+        if (f.Text.IndexOf("BakeryWineHost.EnsureStarted", StringComparison.Ordinal) < 0)
+        {
+            string[] signatures =
+            {
+                "IEnumerator RenderReflProbesFunc()",
+                "IEnumerator RenderLightProbesFunc()",
+                "public IEnumerator RenderLightmapFunc()"
+            };
+
+            foreach (string signature in signatures)
+            {
+                int method = f.Text.IndexOf(signature, StringComparison.Ordinal);
+                if (method < 0)
+                {
+                    f.Errors.Add("Missing host insertion anchor: " + signature);
+                    continue;
+                }
+
+                int brace = f.Text.IndexOf('{', method);
+                if (brace < 0)
+                {
+                    f.Errors.Add("Missing coroutine body in: " + signature);
+                    continue;
+                }
+
+                int at = brace + 1;
+                f.Text = f.Text.Insert(at, nl + "        BakeryWineHost.EnsureStarted();");
+            }
+        }
+
+        if (f.Text.IndexOf("BakeryWineHost.Stop", StringComparison.Ordinal) < 0)
+        {
+            f.ReplaceLines(
+@"        if (OnFinishedReflectionProbes != null)
+        {
+            OnFinishedReflectionProbes.Invoke(this, null);
+        }
+
+        bakeInProgress = false;",
+@"        if (OnFinishedReflectionProbes != null)
+        {
+            OnFinishedReflectionProbes.Invoke(this, null);
+        }
+
+        bakeInProgress = false;
+        BakeryWineHost.Stop();",
+                false);
+
+            f.ReplaceLines(
+@"        ProgressBarEnd();
+
+        bakeInProgress = false;
+        DebugLogInfo(""Finished rendering Light Probes."");",
+@"        ProgressBarEnd();
+
+        bakeInProgress = false;
+        BakeryWineHost.Stop();
+        DebugLogInfo(""Finished rendering Light Probes."");",
+                false);
+
+            f.ReplaceLines(
+@"            while(progressFunc.MoveNext()) {}
+            EditorApplication.update -= RenderLightmapUpdate;
+            bakeInProgress = false;",
+@"            while(progressFunc.MoveNext()) {}
+            EditorApplication.update -= RenderLightmapUpdate;
+            bakeInProgress = false;
+            BakeryWineHost.Stop();",
+                false);
+
+            f.ReplaceLines(
+@"                EditorApplication.update -= RenderLightmapUpdate;
+                bakeInProgress = false;
+#if SUPPORTS_APV",
+@"                EditorApplication.update -= RenderLightmapUpdate;
+                bakeInProgress = false;
+                BakeryWineHost.Stop();
+#if SUPPORTS_APV",
+                false);
+        }
     }
 
     static bool RemoveRenderLightmapXatlasFallbacks(BakeryLinuxPatchFile f)
