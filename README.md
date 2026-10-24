@@ -1,6 +1,6 @@
 # MarksMOD - Bakery Linux compatibility layer
 
-Version: 0.04
+Version: 1.00
 
 MarksMOD adds a Linux/Wine compatibility layer to an existing Bakery installation. It does not contain Bakery itself and does not include Bakery addon files.
 
@@ -22,7 +22,7 @@ MarksMOD adds a Linux/Wine compatibility layer to an existing Bakery installatio
 
 `Restore Bakery` reverts the patched Bakery scripts from the stored backups.
 
-The current patcher version is 16 and targets eight Bakery files.
+The current patcher version is 17 and targets eight Bakery files.
 
 ## Tested scope
 
@@ -41,9 +41,9 @@ Two-level LOD groups are tested. Very large meshes and the 32-bit index guard ar
 - OptiX 5 and OptiX 6 denoiser selections are mapped to OptiX 7 on Linux because the legacy denoisers are not supported by the Wine bridge. OptiX 7, OIDN v1 and OIDN v2 run natively through their normal backends.
 - ECS, terrain, skinned meshes, APV and probe-SH directional mode have no test fixtures and are not claimed as supported. APV was not tested.
 - The assembled-prefab example is not bakeable by design; use the prefab bake test path.
-- Interactive progress and wizard dialogs require a GUI editor session. Batchmode progress reporting is suppressed.
+- Interactive progress and wizard behavior were verified in a GUI editor session. Batchmode progress reporting is suppressed.
 - The Built-in render pipeline is out of scope; the tested pipeline is URP.
-- No Windows-vs-Linux image parity claim is made. The test suite validates artifacts and isolation.
+- Pixel-level Windows-vs-Linux parity was verified for the tested scenes; re-check new scenes after driver or Bakery changes.
 
 ## Notes
 

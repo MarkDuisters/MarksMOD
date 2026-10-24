@@ -437,6 +437,8 @@ public static class BakeryLinuxPatchRules
         hasAnyProbes = true;
         bool probeSavedRtxMode = rtxMode;
         bool probeSavedDistanceShadowmask = isDistanceShadowmask;
+        var probeSavedRenderDirMode = renderDirMode;
+        var probeSavedLightProbeMode = lightProbeMode;
         var probeGroups = FindObjectsOfType(typeof(LightProbeGroup)) as LightProbeGroup[];");
 
         f.ReplaceLines(
@@ -513,10 +515,14 @@ public static class BakeryLinuxPatchRules
             }
             rtxMode = probeSavedRtxMode;
             isDistanceShadowmask = probeSavedDistanceShadowmask;
+            renderDirMode = probeSavedRenderDirMode;
+            lightProbeMode = probeSavedLightProbeMode;
             if (renderSettingsStorage != null)
             {
                 renderSettingsStorage.renderSettingsRTXMode = rtxMode;
                 renderSettingsStorage.renderSettingsDistanceShadowmask = isDistanceShadowmask;
+                renderSettingsStorage.renderSettingsRenderDirMode = (int)renderDirMode;
+                renderSettingsStorage.renderSettingsLightProbeMode = (int)lightProbeMode;
                 EditorUtility.SetDirty(renderSettingsStorage);
             }
             ftLightmaps.RefreshFull();
