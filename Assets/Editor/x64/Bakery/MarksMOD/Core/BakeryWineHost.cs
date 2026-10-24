@@ -35,14 +35,29 @@ public static class BakeryWineHost
         }
     }
 
+    public static string NativeDirectory
+    {
+        get
+        {
+            string configured = Environment.GetEnvironmentVariable("BAKERY_MARKSMOD_NATIVE");
+            if (!string.IsNullOrEmpty(configured)) return configured;
+
+            string payload = Environment.GetEnvironmentVariable("BAKERY_FRENDER_DIR");
+            if (string.IsNullOrEmpty(payload)) payload = Environment.GetEnvironmentVariable("BAKERY_TOOLS_DIR");
+            if (!string.IsNullOrEmpty(payload)) return Path.Combine(payload, "MarksMOD", "Native");
+
+            return Path.Combine(Application.dataPath, "Editor/x64/Bakery/MarksMOD/Native");
+        }
+    }
+
     public static string ScriptDirectory
     {
-        get { return Application.dataPath + "/Editor/x64/Bakery/MarksMOD/Native/wine"; }
+        get { return Path.Combine(NativeDirectory, "wine"); }
     }
 
     public static string HostDirectory
     {
-        get { return Application.dataPath + "/Editor/x64/Bakery/MarksMOD/Native/dist~/bin"; }
+        get { return Path.Combine(NativeDirectory, "dist~/bin"); }
     }
 
     public static bool IsListening()
@@ -113,9 +128,15 @@ public static class BakeryWineHost
 
         Environment.SetEnvironmentVariable("BAKERY_WINE_SCRIPT", script);
         Environment.SetEnvironmentVariable("BAKERY_WINE_HOST", host);
-        string xatlasDll = Path.Combine(Application.dataPath, "Editor/x64/Bakery/scripts/xatlas/xatlasLib.dll");
-        if (string.IsNullOrEmpty(Environment.GetEnvironmentVariable("BAKERY_XATLAS_DLL")))
+        string xatlasDll = Environment.GetEnvironmentVariable("BAKERY_XATLAS_DLL");
+        if (string.IsNullOrEmpty(xatlasDll))
+        {
+            string payload = Environment.GetEnvironmentVariable("BAKERY_FRENDER_DIR");
+            if (string.IsNullOrEmpty(payload)) payload = Environment.GetEnvironmentVariable("BAKERY_TOOLS_DIR");
+            if (string.IsNullOrEmpty(payload)) payload = Path.Combine(Application.dataPath, "Editor/x64/Bakery");
+            xatlasDll = Path.Combine(payload, "scripts", "xatlas", "xatlasLib.dll");
             Environment.SetEnvironmentVariable("BAKERY_XATLAS_DLL", xatlasDll);
+        }
         var configuredRunner = Environment.GetEnvironmentVariable("BAKERY_RUNNER");
         if (!string.IsNullOrEmpty(configuredRunner))
             Environment.SetEnvironmentVariable("BAKERY_WINE", configuredRunner);

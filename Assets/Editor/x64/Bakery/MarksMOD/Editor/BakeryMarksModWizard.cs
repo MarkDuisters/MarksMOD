@@ -66,7 +66,7 @@ public class BakeryMarksModWizard : EditorWindow
         EditorGUILayout.EndHorizontal();
         EditorGUILayout.HelpBox(
             "xatlas uses the xatlasLib.dll shipped with your Bakery installation " +
-            "(Editor/x64/Bakery/scripts/xatlas) through the Wine host.", MessageType.None);
+            "its scripts/xatlas folder through the Wine host.", MessageType.None);
         EditorGUILayout.LabelField(BakeryXatlasBackendService.GetStatus(), EditorStyles.miniLabel);
         if (!BakeryXatlasBackendService.IsActive)
         {

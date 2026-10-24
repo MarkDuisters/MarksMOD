@@ -31,6 +31,7 @@ public static class BakeryLinuxBootstrap
 
         Environment.SetEnvironmentVariable("BAKERY_TOOLS_DIR", BakeryToolPaths.PayloadDirectory);
         Environment.SetEnvironmentVariable("BAKERY_FRENDER_DIR", BakeryToolPaths.PayloadDirectory);
+        Environment.SetEnvironmentVariable("BAKERY_MARKSMOD_NATIVE", BakeryToolPaths.NativeDirectory);
         Environment.SetEnvironmentVariable(
             "BAKERY_WINE_SCRIPT",
             Path.Combine(BakeryLinuxSetup.ScriptDirectory, "probe.sh"));

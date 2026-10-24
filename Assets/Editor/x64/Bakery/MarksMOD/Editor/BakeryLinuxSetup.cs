@@ -48,7 +48,7 @@ public static class BakeryLinuxSetup
 
     public static string ScriptDirectory
     {
-        get { return Application.dataPath + "/Editor/x64/Bakery/MarksMOD/Native/wine"; }
+        get { return Path.Combine(BakeryToolPaths.NativeDirectory, "wine"); }
     }
 
     public static bool SetupComplete

@@ -106,7 +106,7 @@ public static class BakeryXatlasBackendService
 
     static string ToAssetPath(string path)
     {
-        return "Assets" + path.Substring(Application.dataPath.Length).Replace('\\', '/');
+        return BakeryToolPaths.ToAssetPath(path);
     }
 
     static bool FilesMatch(string left, string right)

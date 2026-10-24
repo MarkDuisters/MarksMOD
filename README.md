@@ -1,6 +1,6 @@
 # MarksMOD - Bakery Linux compatibility layer
 
-Version: 1.00
+Version: 1.01
 
 MarksMOD adds a Linux/Wine compatibility layer to an existing Bakery installation. It does not contain Bakery itself and does not include Bakery addon files.
 

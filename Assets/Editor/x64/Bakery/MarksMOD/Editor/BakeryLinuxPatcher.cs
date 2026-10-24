@@ -37,12 +37,12 @@ public static class BakeryLinuxPatcher
 
     public static string ScriptsDirectory
     {
-        get { return Application.dataPath + "/Editor/x64/Bakery/scripts"; }
+        get { return Path.Combine(BakeryToolPaths.PayloadDirectory, "scripts"); }
     }
 
     public static string BackupDirectory
     {
-        get { return Application.dataPath + "/Editor/x64/Bakery/MarksMOD/Native/backup~"; }
+        get { return Path.Combine(BakeryToolPaths.NativeDirectory, "backup~"); }
     }
 
     public static bool IsPatched
@@ -170,7 +170,7 @@ public static class BakeryLinuxPatcher
         var result = RestoreFrom(ScriptsDirectory, BackupDirectory, false);
         if (!result.Success) return result;
 
-        const string modAssetPath = "Assets/Editor/x64/Bakery/MarksMOD";
+        string modAssetPath = BakeryToolPaths.ToAssetPath(BakeryToolPaths.MarksModDirectory);
         try
         {
             if (AssetDatabase.IsValidFolder(modAssetPath))
