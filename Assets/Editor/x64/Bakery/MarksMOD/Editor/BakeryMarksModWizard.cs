@@ -55,28 +55,14 @@ public class BakeryMarksModWizard : EditorWindow
     {
         EditorGUILayout.LabelField("Bakery Linux setup wizard", EditorStyles.boldLabel);
         EditorGUILayout.HelpBox(
-            "Verifies the Wine bridge and every component Bakery needs on Linux. " +
-            "Run Setup first, then Patch Bakery. Re-check to verify the result.",
+            "Follow the numbered steps: 1) Run Setup, 2) Patch Bakery, 3) Activate xatlas. " +
+            "Re-check to verify the result.",
             MessageType.None);
 
         EditorGUILayout.BeginHorizontal();
-        EditorGUILayout.LabelField("xatlas backend", BakeryXatlasBackendService.ActiveBackendName);
-        if (GUILayout.Button("Activate", GUILayout.Width(70)))
-        {
-            string error;
-            if (BakeryXatlasBackendService.Activate(out error))
-            {
-                EditorUtility.DisplayDialog(
-                    "xatlas backend",
-                    "Activated Bakery's built-in xatlas. Restart Unity before baking; native plugins may already be loaded.",
-                    "OK");
-                Recheck();
-            }
-            else
-            {
-                EditorUtility.DisplayDialog("xatlas backend", error, "OK");
-            }
-        }
+        if (GUILayout.Button("1. Run Setup")) BakeryLinuxSetup.RunSetup();
+        if (GUILayout.Button("2. Patch Bakery")) PatchBakery();
+        if (GUILayout.Button("3. Activate xatlas")) ActivateXatlas();
         EditorGUILayout.EndHorizontal();
         EditorGUILayout.HelpBox(
             "xatlas uses the xatlasLib.dll shipped with your Bakery installation " +
@@ -85,7 +71,7 @@ public class BakeryMarksModWizard : EditorWindow
         if (!BakeryXatlasBackendService.IsActive)
         {
             EditorGUILayout.HelpBox(
-                "Bakery's xatlas proxy is not active. Click Activate, then restart Unity.",
+                "Bakery's xatlas proxy is not active. Use step 3, then restart Unity.",
                 MessageType.Warning);
         }
 
@@ -99,16 +85,10 @@ public class BakeryMarksModWizard : EditorWindow
 
         EditorGUILayout.Space();
         EditorGUILayout.BeginHorizontal();
-        if (GUILayout.Button("Run Setup")) BakeryLinuxSetup.RunSetup();
-        if (GUILayout.Button("Patch Bakery")) PatchBakery();
-        if (GUILayout.Button("Restore Bakery")) RestoreBakery();
-        EditorGUILayout.EndHorizontal();
-
-        EditorGUILayout.Space();
-        EditorGUILayout.BeginHorizontal();
         if (GUILayout.Button("Re-check")) Recheck();
         if (GUILayout.Button("Test Bridge")) BakeryLinuxProbeRunner.Start("--ping");
         if (GUILayout.Button("Open Log")) OpenLog();
+        if (GUILayout.Button("Restore Bakery")) RestoreBakery();
         EditorGUILayout.EndHorizontal();
 
         BakeryLinuxSetup.ShowSetupAtStart = EditorGUILayout.ToggleLeft("Show setup at start", BakeryLinuxSetup.ShowSetupAtStart);
@@ -130,6 +110,23 @@ public class BakeryMarksModWizard : EditorWindow
             probeScroll = EditorGUILayout.BeginScrollView(probeScroll, GUILayout.Height(180));
             EditorGUILayout.TextArea(BakeryLinuxProbeRunner.Output, GUILayout.ExpandHeight(true));
             EditorGUILayout.EndScrollView();
+        }
+    }
+
+    static void ActivateXatlas()
+    {
+        string error;
+        if (BakeryXatlasBackendService.Activate(out error))
+        {
+            EditorUtility.DisplayDialog(
+                "xatlas backend",
+                "Activated Bakery's built-in xatlas. Restart Unity before baking; native plugins may already be loaded.",
+                "OK");
+            RefreshIfOpen();
+        }
+        else
+        {
+            EditorUtility.DisplayDialog("xatlas backend", error, "OK");
         }
     }
 

@@ -78,8 +78,9 @@ See `wine/README.md`.
 
 On first editor load, `BakeryLinuxSetup.cs` offers a **Setup Wine** dialog that runs
 `wine/bootstrap.sh` with a progress bar, then opens the status wizard. The only menu entry is
-`Bakery > MarksMOD > Setup Wizard` (per-component OK/WARN/FAIL). Use **Run Setup** and then
-**Patch Bakery** in the wizard; the wizard also has a **Show setup at start** toggle. Setup
+`Bakery > MarksMOD > Setup Wizard` (per-component OK/WARN/FAIL). Use **1. Run Setup**,
+**2. Patch Bakery**, then **3. Activate xatlas** in the wizard; the wizard also has a
+**Show setup at start** toggle. Setup
 completion is the `$BAKERY_WINEPREFIX/.bakery-setup-ok` sentinel.
 
 ## xatlas

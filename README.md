@@ -1,6 +1,6 @@
 # MarksMOD - Bakery Linux compatibility layer
 
-Version: 0.03
+Version: 0.04
 
 MarksMOD adds a Linux/Wine compatibility layer to an existing Bakery installation. It does not contain Bakery itself and does not include Bakery addon files.
 
@@ -15,13 +15,14 @@ MarksMOD adds a Linux/Wine compatibility layer to an existing Bakery installatio
 
 1. Copy `MarksMOD/Assets/*` into your Unity project's `Assets/` folder. This merges the `MarksMOD` folder and the Linux plugin shims.
 2. Open `Bakery > MarksMOD > Setup Wizard`.
-3. Run `Run Setup` once to prepare the Wine prefix, VC runtime, DXVK and NVIDIA libraries.
-4. Click `Patch Bakery`. The patcher edits your own Bakery scripts in place and stores pristine backups under `MarksMOD/Native/backup~`.
-5. Use `Re-check` and `Test Bridge` to validate the environment.
+3. Click `1. Run Setup` once to prepare the Wine prefix, VC runtime, DXVK and NVIDIA libraries.
+4. Click `2. Patch Bakery`. The patcher edits your own Bakery scripts in place and stores pristine backups under `MarksMOD/Native/backup~`.
+5. Click `3. Activate xatlas` to install Bakery's xatlas proxy, then restart Unity.
+6. Use `Re-check` and `Test Bridge` to validate the environment.
 
 `Restore Bakery` reverts the patched Bakery scripts from the stored backups.
 
-The current patcher version is 13 and targets eight Bakery files.
+The current patcher version is 16 and targets eight Bakery files.
 
 ## Tested scope
 
@@ -49,6 +50,6 @@ Two-level LOD groups are tested. Very large meshes and the 32-bit index guard ar
 - The prebuilt `bakery_wine_host.exe` is included under `MarksMOD/Native/dist~/bin`.
 - The Linux plugin shims are provided under `Assets/Plugins/x86_64`.
 - D3D11 tools (seamfixer, denoisers, buffer generators) are launched through Wine with explicit DXVK DLL overrides and the configured Wine prefix.
-- The Wine host starts automatically when a bake begins and shuts down when the bake completes.
+- The Wine host starts with the editor and stays available for import-time xatlas work; it shuts down when the editor quits.
 - Bakery UI is left native: use Bakery's Experimental settings for the global Atlas Packer and the Lightmap Group asset inspector for per-group overrides.
 - Do not redistribute the Bakery addon or its native payload. Users must install Bakery themselves.

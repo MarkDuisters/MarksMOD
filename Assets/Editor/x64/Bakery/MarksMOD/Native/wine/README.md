@@ -149,12 +149,10 @@ Progress is handled by `MarksMOD/Core/BakeryProgress.cs`: the native Windows pop
 Windows, while Linux uses `EditorUtility.DisplayCancelableProgressBar` with real cancel support.
 Already-shown bars are polled through the same getter the original code used.
 
-The Linux atlas packer is forced to Bakery's managed `Default` packer because the xatlas and
-uvrepack binaries are not available natively. Groups that explicitly require xatlas (e.g. mixed
-LOD levels) are not supported on Linux yet.
-
-The Linux bootstrap starts the host automatically once setup is complete; the wizard's
-**Test Bridge** starts it and sends `CMD_PING`.
+xatlas runs through Bakery's own `scripts/xatlas/xatlasLib.dll` in the host. The Linux
+bootstrap starts the host at editor startup and keeps it available for bakes and import-time
+xatlas unwrapping; it shuts down when the editor quits. The wizard's **Test Bridge** starts it
+if needed and sends `CMD_PING`.
 
 ## Host binary: ship it, don't build it
 

@@ -31,6 +31,12 @@ public static class BakeryLinuxBootstrap
 
         Environment.SetEnvironmentVariable("BAKERY_TOOLS_DIR", BakeryToolPaths.PayloadDirectory);
         Environment.SetEnvironmentVariable("BAKERY_FRENDER_DIR", BakeryToolPaths.PayloadDirectory);
+        Environment.SetEnvironmentVariable(
+            "BAKERY_WINE_SCRIPT",
+            Path.Combine(BakeryLinuxSetup.ScriptDirectory, "probe.sh"));
+        Environment.SetEnvironmentVariable(
+            "BAKERY_XATLAS_DLL",
+            Path.Combine(BakeryToolPaths.PayloadDirectory, "scripts", "xatlas", "xatlasLib.dll"));
 
         if (string.IsNullOrEmpty(Environment.GetEnvironmentVariable("DXVK_CONFIG")))
         {
@@ -70,6 +76,9 @@ public static class BakeryLinuxBootstrap
         }
 
         BakeryLinuxSetup.ScheduleStartupCheck();
+        BakeryLinuxHost.ScheduleStart();
+        EditorApplication.quitting -= BakeryWineHost.Stop;
+        EditorApplication.quitting += BakeryWineHost.Stop;
     }
 
     static string FindInPath(string exe)

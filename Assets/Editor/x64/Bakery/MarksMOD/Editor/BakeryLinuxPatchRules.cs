@@ -120,6 +120,7 @@ public static class BakeryLinuxPatchRules
                 text.IndexOf("BakeryWineHost.EnsureStarted", StringComparison.Ordinal) >= 0 &&
                 text.IndexOf("startInfo.FileName.EndsWith(\"ftrace.exe\")", StringComparison.Ordinal) >= 0 &&
                 text.IndexOf("linuxLegacyDenoiserWarned", StringComparison.Ordinal) >= 0 &&
+                text.IndexOf("GUI.enabled = oldEnabled && ftBuildGraphics.unwrapUVs;", StringComparison.Ordinal) >= 0 &&
                 text.IndexOf("EditorGUILayout.LabelField(\"Atlas packer\"", StringComparison.Ordinal) < 0 &&
                 text.IndexOf("lmname + \"_final_Dir\" + (compressedOutput ? \".lz4\" : \".dds\") + \"\\\"\"", StringComparison.Ordinal) >= 0 &&
                 text.IndexOf("if (ftBuildGraphics.atlasPacker == ftGlobalStorage.AtlasPacker.xatlas) ftBuildGraphics.atlasPacker = ftGlobalStorage.AtlasPacker.Default;", StringComparison.Ordinal) < 0;
@@ -280,6 +281,39 @@ public static class BakeryLinuxPatchRules
                   false);
 
         AddHostLifecycleRules(f);
+
+        f.ReplaceLines(
+@"        if (settingsMode >= SettingsMode.Advanced)
+        {
+            this.minSize = new Vector2(position.height >= scrollHeight ? 250 : 270, 700);
+        }
+        this.maxSize = new Vector2(this.minSize.x, settingsMode >= SettingsMode.Advanced ? 2000 : this.minSize.y + 1);",
+@"        if (Event.current.type == EventType.Layout)
+        {
+            if (settingsMode >= SettingsMode.Advanced)
+            {
+                this.minSize = new Vector2(position.height >= scrollHeight ? 250 : 270, 700);
+            }
+            this.maxSize = new Vector2(this.minSize.x, settingsMode >= SettingsMode.Advanced ? 2000 : this.minSize.y + 1);
+        }",
+            false);
+
+        f.Replace(
+            "if (settingsMode == SettingsMode.Experimental && ftBuildGraphics.unwrapUVs)",
+            "if (settingsMode == SettingsMode.Experimental)",
+            false);
+
+        f.ReplaceLines(
+@"            var prev = unwrapper;
+            unwrapper = (ftGlobalStorage.Unwrapper)EditorGUILayout.EnumPopup(unwrapper, opts);
+            if (unwrapper != prev)",
+@"            bool oldEnabled = GUI.enabled;
+            GUI.enabled = oldEnabled && ftBuildGraphics.unwrapUVs;
+            var prev = unwrapper;
+            unwrapper = (ftGlobalStorage.Unwrapper)EditorGUILayout.EnumPopup(unwrapper, opts);
+            GUI.enabled = oldEnabled;
+            if (ftBuildGraphics.unwrapUVs && unwrapper != prev)",
+            false);
 
         f.ReplaceLines(
 @"    public static ftGlobalStorage.DenoiserType denoiserType = ftGlobalStorage.DenoiserType.OpenImageDenoise;",
@@ -679,56 +713,6 @@ public static class BakeryLinuxPatchRules
             }
         }
 
-        if (f.Text.IndexOf("BakeryWineHost.Stop", StringComparison.Ordinal) < 0)
-        {
-            f.ReplaceLines(
-@"        if (OnFinishedReflectionProbes != null)
-        {
-            OnFinishedReflectionProbes.Invoke(this, null);
-        }
-
-        bakeInProgress = false;",
-@"        if (OnFinishedReflectionProbes != null)
-        {
-            OnFinishedReflectionProbes.Invoke(this, null);
-        }
-
-        bakeInProgress = false;
-        BakeryWineHost.Stop();",
-                false);
-
-            f.ReplaceLines(
-@"        ProgressBarEnd();
-
-        bakeInProgress = false;
-        DebugLogInfo(""Finished rendering Light Probes."");",
-@"        ProgressBarEnd();
-
-        bakeInProgress = false;
-        BakeryWineHost.Stop();
-        DebugLogInfo(""Finished rendering Light Probes."");",
-                false);
-
-            f.ReplaceLines(
-@"            while(progressFunc.MoveNext()) {}
-            EditorApplication.update -= RenderLightmapUpdate;
-            bakeInProgress = false;",
-@"            while(progressFunc.MoveNext()) {}
-            EditorApplication.update -= RenderLightmapUpdate;
-            bakeInProgress = false;
-            BakeryWineHost.Stop();",
-                false);
-
-            f.ReplaceLines(
-@"                EditorApplication.update -= RenderLightmapUpdate;
-                bakeInProgress = false;
-#if SUPPORTS_APV",
-@"                EditorApplication.update -= RenderLightmapUpdate;
-                bakeInProgress = false;
-                BakeryWineHost.Stop();
-#if SUPPORTS_APV",
-                false);
-        }
     }
 
     static bool RemoveRenderLightmapXatlasFallbacks(BakeryLinuxPatchFile f)
