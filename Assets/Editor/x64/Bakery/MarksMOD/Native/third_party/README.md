@@ -9,7 +9,6 @@ Pinned, build-time acquisition. Do not vendor binaries into the repository.
 | Vulkan loader + headers | libfrender (Vulkan path), seamfixer | `VK_KHR_ray_query` optional |
 | oneTBB | concurrency | replaces `tbb*.dll` |
 | Intel OIDN | OIDN denoisers | cross-platform |
-| xatlas (MIT) | glue (atlas) | open source |
 | zlib / zstd / lz4 | GBuffer compression | match `.lz4` container |
 | libpng / libjpeg / OpenEXR | image IO | TGA/DDS/HDR handled in-tree |
 

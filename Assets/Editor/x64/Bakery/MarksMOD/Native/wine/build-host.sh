@@ -40,5 +40,5 @@ if [ -z "$cxx" ]; then
 fi
 
 mkdir -p "$out"
-"$cxx" -std=c++17 -O2 -static -I "$root/src/wine" -I "$root/src/frender" -o "$out/bakery_wine_host.exe" "$src" -lws2_32
+"$cxx" -std=c++17 -O2 -static -pthread -I "$root/src/wine" -I "$root/src/frender" -o "$out/bakery_wine_host.exe" "$src" -lws2_32
 printf 'built %s with %s\n' "$out/bakery_wine_host.exe" "$cxx"

@@ -9,14 +9,14 @@ managed code reaches through a `DllImport` resolver (`MarksMOD/Editor/BakeryLinu
 ```
 MarksMOD/Native/
   src/glue/      libbakery_glue.so   CPU/OS shim (process, progress, user32, half2vb, uvrepack, zip)
-                 libxatlasLib.so     real xatlas wrapper (upstream xatlas + xatlas_bridge.cpp)
+                  libxatlasLib.so     ABI proxy to Bakery's Windows xatlasLib.dll
   src/frender/   libfrender.so       ABI proxy to the Wine-hosted frender.dll (or stub)
   src/wine/      bakery_wine_host    Wine worker: loads real frender.dll, serves IPC
   src/ftrace/    ftrace*             (unused in the Wine path; kept for the native contingency)
   src/tools/     combine*, ftServer, seamfixer, ...   CLI helpers
   wine/          bootstrap/probe/build scripts for the Wine bridge
   build/         CMake build
-  third_party/   pinned dependencies (xatlas source)
+  third_party/   pinned dependency notes
   dist~/lib/      built shared libraries (Unity-ignored; install-libs copies them)
   dist~/bin/      built tool executables (Unity-ignored)
 ```
@@ -46,14 +46,18 @@ name. `install-libs.sh` copies the built libraries into `Assets/Plugins/x86_64` 
 | `xatlasLib` | `libxatlasLib.so` |
 | `user32.dll` | `libuser32.so` |
 
-All alias libraries are copies of `libbakery_glue.so` except `libfrender.so` and `libxatlasLib.so`, which is built from `third_party/xatlas/xatlas.cpp` plus `src/glue/xatlas_bridge.cpp`.
+All alias libraries are copies of `libbakery_glue.so` except `libfrender.so` and `libxatlasLib.so`.
+
+`libxatlasLib.so` is the Wine proxy. It never casts its logical 64-bit atlas handle to a Linux
+pointer: all atlas state is owned by `bakery_wine_host.exe`, which loads `BAKERY_XATLAS_DLL`
+or `${BAKERY_FRENDER_DIR}/scripts\\xatlas\\xatlasLib.dll`.
 
 ## Build
 
 ```
 cmake -S build -B build/out -DCMAKE_BUILD_TYPE=Release -DBAKERY_FRENDER_WINE=ON
 cmake --build build/out -j
-cmake --build build/out --target install-libs   # copies libs + aliases to Assets/Plugins/x86_64
+  cmake --build build/out --target install-libs   # copies the xatlas proxy + aliases to Assets/Plugins/x86_64
 
 wine/bootstrap.sh       # creates/configures the user's Wine prefix
 wine/probe.sh           # validates D3D11/DXVK + CUDA/OptiX bridge
@@ -73,6 +77,17 @@ The glue launches tools through `BAKERY_RUNNER` (default `wine`; also `proton ru
 See `wine/README.md`.
 
 On first editor load, `BakeryLinuxSetup.cs` offers a **Setup Wine** dialog that runs
-`wine/bootstrap.sh` with a progress bar, then opens the status wizard. Menu under
-`Bakery > MarksMOD`: `Setup Wizard` (per-component OK/WARN/FAIL), `Run Wine Setup`,
-`Reset Setup Prompt`. Setup completion is the `$BAKERY_WINEPREFIX/.bakery-setup-ok` sentinel.
+`wine/bootstrap.sh` with a progress bar, then opens the status wizard. The only menu entry is
+`Bakery > MarksMOD > Setup Wizard` (per-component OK/WARN/FAIL). Use **Run Setup** and then
+**Patch Bakery** in the wizard; the wizard also has a **Show setup at start** toggle. Setup
+completion is the `$BAKERY_WINEPREFIX/.bakery-setup-ok` sentinel.
+
+## xatlas
+
+xatlas runs through Bakery's own `scripts/xatlas/xatlasLib.dll` under the Wine host. The
+active `Assets/Plugins/x86_64/libxatlasLib.so` is the ABI proxy; `libxatlasLib_wine.so` is kept
+as the source copy used by the wizard's Activate action.
+
+Use **Activate** in the setup wizard if the proxy is not active, then restart Unity because
+native plugins may already be loaded. The backend requires a configured Wine runner
+(`BAKERY_WINE`), `bakery_wine_host.exe`, and the user's Bakery xatlas DLL.

@@ -111,12 +111,15 @@ public static class BakeryLinuxPatchRules
             case "ftUpdater.cs": return text.IndexOf("BakeryProcess.ExtractZIP", StringComparison.Ordinal) >= 0;
             case "ftBuildGraphics.cs": return text.IndexOf("BakeryProgress.Show", StringComparison.Ordinal) >= 0 &&
                 text.IndexOf("AddTempPinnedHandle", StringComparison.Ordinal) >= 0 &&
+                text.IndexOf("MoveObjectToAtlasGroup", StringComparison.Ordinal) >= 0 &&
                 text.IndexOf("skipping the probe lightmap group", StringComparison.Ordinal) >= 0 &&
                 text.IndexOf("public static ftGlobalStorage.AtlasPacker atlasPacker = ftGlobalStorage.AtlasPacker.Default;", StringComparison.Ordinal) < 0 &&
                 text.IndexOf("if (packer == ftGlobalStorage.AtlasPacker.xatlas) packer = ftGlobalStorage.AtlasPacker.Default;", StringComparison.Ordinal) < 0;
             case "ftRenderLightmap.cs": return text.IndexOf("BakeryProcess.RunLocalProcess", StringComparison.Ordinal) >= 0 &&
                 text.IndexOf("ResolveProbeLightingDataAssetPath", StringComparison.Ordinal) >= 0 &&
                 text.IndexOf("BakeryWineHost.EnsureStarted", StringComparison.Ordinal) >= 0 &&
+                text.IndexOf("startInfo.FileName.EndsWith(\"ftrace.exe\")", StringComparison.Ordinal) >= 0 &&
+                text.IndexOf("linuxLegacyDenoiserWarned", StringComparison.Ordinal) >= 0 &&
                 text.IndexOf("EditorGUILayout.LabelField(\"Atlas packer\"", StringComparison.Ordinal) < 0 &&
                 text.IndexOf("lmname + \"_final_Dir\" + (compressedOutput ? \".lz4\" : \".dds\") + \"\\\"\"", StringComparison.Ordinal) >= 0 &&
                 text.IndexOf("if (ftBuildGraphics.atlasPacker == ftGlobalStorage.AtlasPacker.xatlas) ftBuildGraphics.atlasPacker = ftGlobalStorage.AtlasPacker.Default;", StringComparison.Ordinal) < 0;
@@ -174,7 +177,20 @@ public static class BakeryLinuxPatchRules
 
     static void PatchBuildGraphics(BakeryLinuxPatchFile f)
     {
-        if (RemoveBuildGraphicsXatlasFallbacks(f)) return;
+        RemoveBuildGraphicsXatlasFallbacks(f);
+
+        f.ReplaceLines(
+            "            // Create additional lightmaps\n            AllocateAutoAtlas(atlasCount-1, lmgroup, data, atlasSizes);",
+            "            // Create additional lightmaps\n            int generatedAtlasStart = autoAtlasGroups.Count;\n            AllocateAutoAtlas(atlasCount-1, lmgroup, data, atlasSizes);");
+
+        f.ReplaceLines(
+            "            }\n\n            for(int i=0; i<=bSize; i++)\n            {\n                // Get data from xatlas",
+            "            }\n            else if (atlasCount > 1)\n            {\n                // xatlas UVs are local to their atlas. Explicit groups must therefore\n                // use the generated group for every non-zero atlas as well.\n                for(int i=0; i<=bSize; i++)\n                {\n                    int atlasIndex = xatlas.xatlasGetAtlasIndex(atlas, i, 0);\n                    var holder = holderObjs[bStart + i];\n                    var targetGroup = atlasIndex == 0 ? lmgroup : autoAtlasGroups[generatedAtlasStart + atlasIndex - 1];\n                    if (atlasIndex != 0) targetGroup.parentName = lmgroup.parentName;\n                    MoveObjectToAtlasGroup(holder, targetGroup, data);\n\n                    for(int o=0; o<objsToWriteHolder.Count; o++)\n                    {\n                        if (objsToWriteHolder[o] != holder) continue;\n                        data.objsToWriteGroup[o] = targetGroup;\n                    }\n\n                    Debug.Log(\"[BakeryXatlasExplicit] holder=\" + holder.name + \" atlas=\" + atlasIndex +\n                        \" group=\" + targetGroup.name + \" resolution=\" + targetGroup.resolution);\n                }\n            }\n\n            for(int i=0; i<=bSize; i++)\n            {\n                // Get data from xatlas",
+            false);
+
+        f.ReplaceLines(
+            "    static void MoveObjectToImplicitGroup(GameObject holder, BakeryLightmapGroup newGroup, ExportSceneData data)",
+            "    static void MoveObjectToAtlasGroup(GameObject holder, BakeryLightmapGroup newGroup, ExportSceneData data)\n    {\n        var storage = data.storages[data.sceneToID[holder.scene]];\n        tempStorage.implicitGroupMap[holder] = newGroup;\n\n        for(int k=0; k<storage.implicitGroupedObjects.Count; k++)\n        {\n            if (storage.implicitGroupedObjects[k] != holder) continue;\n            storage.implicitGroups[k] = newGroup;\n            return;\n        }\n\n        storage.implicitGroupedObjects.Add(holder);\n        storage.implicitGroups.Add(newGroup);\n    }\n\n    static void MoveObjectToImplicitGroup(GameObject holder, BakeryLightmapGroup newGroup, ExportSceneData data)");
 
         if (f.Text.IndexOf("static void AddTempPinnedHandle(GCHandle handle)", StringComparison.Ordinal) < 0)
         {
@@ -264,6 +280,61 @@ public static class BakeryLinuxPatchRules
                   false);
 
         AddHostLifecycleRules(f);
+
+        f.ReplaceLines(
+@"    public static ftGlobalStorage.DenoiserType denoiserType = ftGlobalStorage.DenoiserType.OpenImageDenoise;",
+@"    public static ftGlobalStorage.DenoiserType denoiserType = ftGlobalStorage.DenoiserType.OpenImageDenoise;
+    static bool linuxLegacyDenoiserWarned;",
+            false);
+
+        f.Replace(
+            "if (denoiserType == ftGlobalStorage.DenoiserType.Optix5 && !gstorage.runsOptix5)",
+            "if (Application.platform != RuntimePlatform.LinuxEditor && denoiserType == ftGlobalStorage.DenoiserType.Optix5 && !gstorage.runsOptix5)",
+            false);
+        f.Replace(
+            "else if (denoiserType == ftGlobalStorage.DenoiserType.Optix6 && !gstorage.runsOptix6)",
+            "else if (Application.platform != RuntimePlatform.LinuxEditor && denoiserType == ftGlobalStorage.DenoiserType.Optix6 && !gstorage.runsOptix6)",
+            false);
+
+        f.ReplaceLines(
+@"    string GetDenoiseMode()
+    {
+        string denoiseMod;
+        switch(denoiserType)
+        {",
+@"    string GetDenoiseMode()
+    {
+        if (Application.platform == RuntimePlatform.LinuxEditor &&
+            (denoiserType == ftGlobalStorage.DenoiserType.Optix5 ||
+             denoiserType == ftGlobalStorage.DenoiserType.Optix6))
+        {
+            if (!linuxLegacyDenoiserWarned)
+            {
+                DebugLogWarning(""OptiX 5/6 denoiser is not supported by the Linux bridge; using OptiX 7"");
+                linuxLegacyDenoiserWarned = true;
+            }
+            return ""72"";
+        }
+
+        string denoiseMod;
+        switch(denoiserType)
+        {",
+            false);
+
+        f.ReplaceLines(
+@"                    var app = Path.GetFileNameWithoutExtension(deferredCommands[i].FileName);
+                    var origApp = app;",
+@"#if UNITY_EDITOR_LINUX
+                    if (startInfo.FileName.EndsWith(""ftrace.exe"") || startInfo.FileName.EndsWith(""ftraceRTX.exe""))
+                    {
+                        startInfo.FileName = Path.Combine(Path.GetDirectoryName(startInfo.FileName), ftraceExe9);
+                        deferredCommands[i] = startInfo;
+                    }
+#endif
+
+                    var app = Path.GetFileNameWithoutExtension(deferredCommands[i].FileName);
+                    var origApp = app;",
+            false);
 
         f.Replace("if (settingsMode == SettingsMode.Advanced) scrollHeight += 160;",
                   "if (settingsMode == SettingsMode.Advanced) scrollHeight += 100;",

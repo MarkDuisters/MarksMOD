@@ -38,6 +38,7 @@ public static class BakeryLinuxHost
 
         psi.Environment["BAKERY_WINEPREFIX"] = BakeryLinuxSetup.PrefixPath;
         psi.Environment["BAKERY_FRENDER_DIR"] = BakeryToolPaths.PayloadDirectory;
+        psi.Environment["BAKERY_XATLAS_DLL"] = Path.Combine(BakeryToolPaths.PayloadDirectory, "scripts/xatlas/xatlasLib.dll");
 
         CopyEnv(psi, "BAKERY_RUNNER");
         CopyEnv(psi, "DXVK_CONFIG");

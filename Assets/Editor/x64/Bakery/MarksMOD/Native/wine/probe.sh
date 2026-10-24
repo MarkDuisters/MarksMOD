@@ -33,18 +33,72 @@ printf 'Bakery Wine probe\n'
 WINE="$(find_wine || true)"
 [ -n "${WINE:-}" ] && ok "wine: $("$WINE" --version 2>/dev/null)" || bad "wine not found"
 
-if [ "${1:-}" = "--start" ]; then
+port_open() {
+    python3 - <<'PY'
+import socket
+try:
+    socket.create_connection(("127.0.0.1", 27778), timeout=0.4).close()
+    raise SystemExit(0)
+except OSError:
+    raise SystemExit(1)
+PY
+}
+
+if [ "${1:-}" = "--start" ] || [ "${1:-}" = "--stop" ]; then
     host_exe="$MARKS_NATIVE/dist~/bin/bakery_wine_host.exe"
     ping_py="$(dirname "${BASH_SOURCE[0]}")/host_ping.py"
-    if python3 "$ping_py" --wait >/dev/null 2>&1; then exit 0; fi
+    exec 9>/tmp/bakery_wine_host.start.lock
+    flock 9
+
+    if [ "${1:-}" = "--stop" ]; then
+        python3 "$ping_py" --stop >/dev/null 2>&1 && exit 0
+        if port_open; then exit 1; fi
+        exit 0
+    fi
+
+    if python3 "$ping_py" --wait 3 >/dev/null 2>&1; then exit 0; fi
+
+    if port_open; then
+        pid=""
+        [ -f /tmp/bakery_wine_host.pid ] && pid="$(cat /tmp/bakery_wine_host.pid 2>/dev/null)"
+        if [ -n "$pid" ] && kill -0 "$pid" 2>/dev/null; then
+            kill -TERM "$pid" 2>/dev/null || true
+            for _ in $(seq 1 20); do
+                port_open || break
+                sleep 0.25
+            done
+            if port_open; then
+                kill -KILL "$pid" 2>/dev/null || true
+                for _ in $(seq 1 10); do
+                    port_open || break
+                    sleep 0.25
+                done
+            fi
+        fi
+        if port_open; then
+            printf 'bakery_wine_host: port 27778 is owned by another process\n' >&2
+            exit 1
+        fi
+        rm -f /tmp/bakery_wine_host.pid
+    fi
+
     if [ ! -f "$host_exe" ]; then
         printf 'bakery_wine_host.exe (PE) missing\n' >&2
         exit 1
     fi
     export BAKERY_FRENDER_DIR="$NATIVE_DIR"
-    WINEPREFIX="$PREFIX" WINEDEBUG=-all nohup "${WINE:-wine}" "$host_exe" >/tmp/bakery_wine_host.log 2>&1 &
-    echo $! >/tmp/bakery_wine_host.pid
-    python3 "$ping_py" --wait >/dev/null 2>&1 && exit 0 || exit 1
+    export BAKERY_XATLAS_DLL="${BAKERY_XATLAS_DLL:-$NATIVE_DIR/scripts/xatlas/xatlasLib.dll}"
+    WINEPREFIX="$PREFIX" WINEDEBUG=-all nohup "${WINE:-wine}" "$host_exe" >/tmp/bakery_wine_host.log 2>&1 9>&- &
+    host_pid=$!
+    echo "$host_pid" >/tmp/bakery_wine_host.pid
+    for _ in $(seq 1 240); do
+        if python3 "$ping_py" >/dev/null 2>&1; then exit 0; fi
+        kill -0 "$host_pid" 2>/dev/null || break
+        sleep 0.5
+    done
+    printf 'bakery_wine_host: failed to become ready; see /tmp/bakery_wine_host.log\n' >&2
+    tail -20 /tmp/bakery_wine_host.log 2>/dev/null >&2 || true
+    exit 1
 fi
 
 command -v winetricks >/dev/null 2>&1 && ok "winetricks present" || warn "winetricks not found"

@@ -9,8 +9,14 @@ using UnityEngine;
 public static class BakeryLinuxSetup
 {
     const string SentinelName = ".bakery-setup-ok";
-    const string PrefDismissed = "Bakery.Linux.SetupDismissed";
+    const string PrefShowAtStart = "Bakery.Linux.ShowSetupAtStart";
     const string LogName = "BakeryLinuxSetup.log";
+
+    public static bool ShowSetupAtStart
+    {
+        get { return EditorPrefs.GetBool(PrefShowAtStart, true); }
+        set { EditorPrefs.SetBool(PrefShowAtStart, value); }
+    }
 
     static Process runningProcess;
     static readonly StringBuilder log = new StringBuilder();
@@ -60,7 +66,7 @@ public static class BakeryLinuxSetup
     {
         if (Application.isBatchMode) return;
         if (running || SetupComplete) return;
-        if (EditorPrefs.GetBool(PrefDismissed, false)) return;
+        if (!ShowSetupAtStart) return;
 
         int choice = EditorUtility.DisplayDialogComplex(
             "Bakery on Linux",
@@ -82,11 +88,10 @@ public static class BakeryLinuxSetup
         }
         else
         {
-            EditorPrefs.SetBool(PrefDismissed, true);
+            ShowSetupAtStart = false;
         }
     }
 
-    [MenuItem("Bakery/MarksMOD/Run Wine Setup")]
     public static void RunSetup()
     {
         if (!IsLinuxEditor)
@@ -141,13 +146,6 @@ public static class BakeryLinuxSetup
 
         running = true;
         EditorApplication.update += Tick;
-    }
-
-    [MenuItem("Bakery/MarksMOD/Reset Setup Prompt")]
-    public static void ResetPrompt()
-    {
-        EditorPrefs.DeleteKey(PrefDismissed);
-        EditorUtility.DisplayDialog("Bakery", "The setup prompt will appear again on the next editor load.", "OK");
     }
 
     static void OnOutput(object sender, DataReceivedEventArgs e)
@@ -212,7 +210,6 @@ public static class BakeryLinuxSetup
 
         if (exitCode == 0 && SetupComplete)
         {
-            BakeryLinuxHost.ScheduleStart();
             EditorUtility.DisplayDialog("Bakery", "Wine setup finished.\n\nPrefix:\n" + PrefixPath, "OK");
         }
         else

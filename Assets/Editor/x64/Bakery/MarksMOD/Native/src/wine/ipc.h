@@ -29,8 +29,52 @@ enum BakeryIpcCmd : uint32_t
     CMD_SET_FIX_POS = 17,
     CMD_SET_UVGB_FLAGS = 18,
     CMD_SET_UVGB_TANGENTS = 19,
-    CMD_TOGGLE_ABG_DITHER = 20
+    CMD_TOGGLE_ABG_DITHER = 20,
+    CMD_XATLAS_CREATE = 100,
+    CMD_XATLAS_ADD_MESH = 101,
+    CMD_XATLAS_ADD_UV_MESH = 102,
+    CMD_XATLAS_PARAMETRIZE = 103,
+    CMD_XATLAS_PACK = 104,
+    CMD_XATLAS_NORMALIZE = 105,
+    CMD_XATLAS_GET_ATLAS_COUNT = 106,
+    CMD_XATLAS_GET_ATLAS_INDEX = 107,
+    CMD_XATLAS_GET_VERTEX_COUNT = 108,
+    CMD_XATLAS_GET_INDEX_COUNT = 109,
+    CMD_XATLAS_GET_DATA = 110,
+    CMD_XATLAS_CLEAR = 111
 };
+
+namespace bakery_ipc
+{
+
+inline const char* command_name(uint32_t cmd)
+{
+    switch (cmd)
+    {
+        case CMD_PING: return "PING";
+        case CMD_INIT_SHADERS: return "INIT_SHADERS";
+        case CMD_LOAD_SCENE: return "LOAD_SCENE";
+        case CMD_UNITY_RENDER_EVENT: return "UNITY_RENDER_EVENT";
+        case CMD_RENDER_UVGBUFFER: return "RENDER_UVGBUFFER";
+        case CMD_GENERATE_ALPHA: return "GENERATE_ALPHA";
+        case CMD_SHUTDOWN: return "SHUTDOWN";
+        case CMD_XATLAS_CREATE: return "XATLAS_CREATE";
+        case CMD_XATLAS_ADD_MESH: return "XATLAS_ADD_MESH";
+        case CMD_XATLAS_ADD_UV_MESH: return "XATLAS_ADD_UV_MESH";
+        case CMD_XATLAS_PARAMETRIZE: return "XATLAS_PARAMETRIZE";
+        case CMD_XATLAS_PACK: return "XATLAS_PACK";
+        case CMD_XATLAS_NORMALIZE: return "XATLAS_NORMALIZE";
+        case CMD_XATLAS_GET_ATLAS_COUNT: return "XATLAS_GET_ATLAS_COUNT";
+        case CMD_XATLAS_GET_ATLAS_INDEX: return "XATLAS_GET_ATLAS_INDEX";
+        case CMD_XATLAS_GET_VERTEX_COUNT: return "XATLAS_GET_VERTEX_COUNT";
+        case CMD_XATLAS_GET_INDEX_COUNT: return "XATLAS_GET_INDEX_COUNT";
+        case CMD_XATLAS_GET_DATA: return "XATLAS_GET_DATA";
+        case CMD_XATLAS_CLEAR: return "XATLAS_CLEAR";
+        default: return "UNKNOWN";
+    }
+}
+
+}
 
 #pragma pack(push, 1)
 struct BakeryIpcHeader

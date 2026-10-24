@@ -1,6 +1,6 @@
 # MarksMOD - Bakery Linux compatibility layer
 
-Version: 0.02
+Version: 0.03
 
 MarksMOD adds a Linux/Wine compatibility layer to an existing Bakery installation. It does not contain Bakery itself and does not include Bakery addon files.
 
@@ -21,24 +21,23 @@ MarksMOD adds a Linux/Wine compatibility layer to an existing Bakery installatio
 
 `Restore Bakery` reverts the patched Bakery scripts from the stored backups.
 
-The current patcher version is 10 and targets eight Bakery files.
+The current patcher version is 13 and targets eight Bakery files.
 
 ## Tested scope
 
-The tested path is Linux + NVIDIA + URP + RTX9 (ftraceRTX9). The test suite covers full lighting, indirect, shadowmask, distance shadowmask, subtractive, AO-only, directional modes, light types, volumes, sectors, prefabs, transparency, denoisers (OptiX 7, OIDN v1/v2), light/reflection probes, cache reuse, cancel/re-bake, runtime lightmap apply, patcher apply/restore, xatlas atlas packing, xatlas unwrapping, multi-atlas/implicit groups, two-level LOD groups, and source isolation.
+The tested path is Linux + NVIDIA + URP + RTX9 (ftraceRTX9). The test suite covers full lighting, indirect, shadowmask, distance shadowmask, subtractive, AO-only, directional modes, light types, volumes, sectors, prefabs, transparency, denoisers (OptiX 7, OIDN v1/v2), light/reflection probes, cache reuse, cancel/re-bake, runtime lightmap apply, patcher apply/restore, Bakery's xatlas, xatlas atlas packing, xatlas unwrapping, multi-atlas/implicit groups, explicit single-atlas ownership, two-level LOD groups, and source isolation.
 
 ## xatlas
 
-- `libxatlasLib.so` is built from the upstream xatlas source (MIT) in `Native/third_party/xatlas`.
-- The UV-mesh path (`PackWithXatlas`) matches the Windows `xatlasLib.dll` in tests.
-- The import-time AddMesh unwrap path is functional, but its UV layout can differ from the older Windows parameterizer. Bakes remain valid.
-- Two-level LOD groups are tested. Very large meshes and the 32-bit index guard are not covered on this Unity version. No independent atlas UV overlap/bounds validation is claimed.
+xatlas uses the `xatlasLib.dll` shipped with the user's Bakery installation through the Wine host. The active `libxatlasLib.so` is the ABI proxy; there is no separate native xatlas build. Pack, unwrap, multi-atlas, explicit single-atlas, and default regression tests pass through Bakery's own implementation. The Wine path uses a persistent host with readiness pings, serialized startup/shutdown, and TCP_NODELAY for practical IPC throughput. Use **Activate** in the setup wizard if the proxy is not active, then restart Unity before baking because native plugins may already be loaded.
+
+Two-level LOD groups are tested. Very large meshes and the 32-bit index guard are not covered on this Unity version. Explicit groups intentionally produce one atlas; multi-atlas coverage uses implicit groups.
 
 ## Known limitations
 
 - The TEMP path must be ASCII. Non-ASCII TEMP paths fail inside the vendor `uvGBufferGen` scene loader. Non-ASCII output paths work.
 - The Bakery updater (`ExtractZIP`) is not implemented.
-- OptiX 5 and OptiX 6 denoisers are unsupported under Wine. Use OptiX 7, RTX9 or OIDN.
+- OptiX 5 and OptiX 6 denoiser selections are mapped to OptiX 7 on Linux because the legacy denoisers are not supported by the Wine bridge. OptiX 7, OIDN v1 and OIDN v2 run natively through their normal backends.
 - ECS, terrain, skinned meshes, APV and probe-SH directional mode have no test fixtures and are not claimed as supported. APV was not tested.
 - The assembled-prefab example is not bakeable by design; use the prefab bake test path.
 - Interactive progress and wizard dialogs require a GUI editor session. Batchmode progress reporting is suppressed.

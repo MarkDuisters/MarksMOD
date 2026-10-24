@@ -20,6 +20,15 @@ public static class BakeryLinuxBootstrap
             }
         }
 
+        var configuredRunner = Environment.GetEnvironmentVariable("BAKERY_WINE");
+        if (string.IsNullOrEmpty(configuredRunner))
+            configuredRunner = Environment.GetEnvironmentVariable("BAKERY_RUNNER");
+        if (!string.IsNullOrEmpty(configuredRunner))
+            Environment.SetEnvironmentVariable("BAKERY_WINE", configuredRunner);
+        Environment.SetEnvironmentVariable(
+            "BAKERY_WINE_HOST",
+            Path.Combine(BakeryToolPaths.HostDirectory, "bakery_wine_host.exe"));
+
         Environment.SetEnvironmentVariable("BAKERY_TOOLS_DIR", BakeryToolPaths.PayloadDirectory);
         Environment.SetEnvironmentVariable("BAKERY_FRENDER_DIR", BakeryToolPaths.PayloadDirectory);
 

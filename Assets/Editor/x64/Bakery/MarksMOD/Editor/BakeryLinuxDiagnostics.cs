@@ -71,6 +71,17 @@ public static class BakeryLinuxDiagnostics
             BakeryLinuxSetup.SetupComplete ? "bootstrap completed" : "run Setup Wine Environment");
 
         string libs = BakeryToolPaths.LibrariesDirectory;
+        string xatlasMissing;
+        bool xatlasReady = BakeryXatlasBackendService.RequiredFilesExist(out xatlasMissing);
+        Add(list, "xatlas backend", xatlasReady && BakeryXatlasBackendService.IsActive
+            ? BakeryCheckStatus.Ok : BakeryCheckStatus.Fail,
+            BakeryXatlasBackendService.GetStatus());
+        string bakeryXatlas = BakeryXatlasBackendService.BakeryXatlasDllPath;
+        bool hasBakeryXatlas = File.Exists(bakeryXatlas);
+        Add(list, "Bakery xatlas DLL", hasBakeryXatlas ? BakeryCheckStatus.Ok : BakeryCheckStatus.Fail,
+            hasBakeryXatlas ? bakeryXatlas + " (" + new FileInfo(bakeryXatlas).Length + " bytes)" : bakeryXatlas);
+        Add(list, "Wine xatlas host", BakeryWineHost.Ping() ? BakeryCheckStatus.Ok : BakeryCheckStatus.Warn,
+            BakeryWineHost.Ping() ? "ready" : "starts on demand");
         string glue = Path.Combine(libs, "libbakery_glue.so");
         Add(list, "libbakery_glue.so", File.Exists(glue) ? BakeryCheckStatus.Ok : BakeryCheckStatus.Warn, libs);
         Add(list, "libfrender.so", File.Exists(Path.Combine(libs, "libfrender.so")) ? BakeryCheckStatus.Ok : BakeryCheckStatus.Warn, libs);

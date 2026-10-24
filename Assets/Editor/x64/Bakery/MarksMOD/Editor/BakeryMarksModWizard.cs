@@ -56,8 +56,38 @@ public class BakeryMarksModWizard : EditorWindow
         EditorGUILayout.LabelField("Bakery Linux setup wizard", EditorStyles.boldLabel);
         EditorGUILayout.HelpBox(
             "Verifies the Wine bridge and every component Bakery needs on Linux. " +
-            "Use Run Setup to (re)install the environment, then Re-check.",
+            "Run Setup first, then Patch Bakery. Re-check to verify the result.",
             MessageType.None);
+
+        EditorGUILayout.BeginHorizontal();
+        EditorGUILayout.LabelField("xatlas backend", BakeryXatlasBackendService.ActiveBackendName);
+        if (GUILayout.Button("Activate", GUILayout.Width(70)))
+        {
+            string error;
+            if (BakeryXatlasBackendService.Activate(out error))
+            {
+                EditorUtility.DisplayDialog(
+                    "xatlas backend",
+                    "Activated Bakery's built-in xatlas. Restart Unity before baking; native plugins may already be loaded.",
+                    "OK");
+                Recheck();
+            }
+            else
+            {
+                EditorUtility.DisplayDialog("xatlas backend", error, "OK");
+            }
+        }
+        EditorGUILayout.EndHorizontal();
+        EditorGUILayout.HelpBox(
+            "xatlas uses the xatlasLib.dll shipped with your Bakery installation " +
+            "(Editor/x64/Bakery/scripts/xatlas) through the Wine host.", MessageType.None);
+        EditorGUILayout.LabelField(BakeryXatlasBackendService.GetStatus(), EditorStyles.miniLabel);
+        if (!BakeryXatlasBackendService.IsActive)
+        {
+            EditorGUILayout.HelpBox(
+                "Bakery's xatlas proxy is not active. Click Activate, then restart Unity.",
+                MessageType.Warning);
+        }
 
         EditorGUILayout.Space();
         scroll = EditorGUILayout.BeginScrollView(scroll);
@@ -69,6 +99,7 @@ public class BakeryMarksModWizard : EditorWindow
 
         EditorGUILayout.Space();
         EditorGUILayout.BeginHorizontal();
+        if (GUILayout.Button("Run Setup")) BakeryLinuxSetup.RunSetup();
         if (GUILayout.Button("Patch Bakery")) PatchBakery();
         if (GUILayout.Button("Restore Bakery")) RestoreBakery();
         EditorGUILayout.EndHorizontal();
@@ -77,10 +108,10 @@ public class BakeryMarksModWizard : EditorWindow
         EditorGUILayout.BeginHorizontal();
         if (GUILayout.Button("Re-check")) Recheck();
         if (GUILayout.Button("Test Bridge")) BakeryLinuxProbeRunner.Start("--ping");
-        if (GUILayout.Button("Run Setup")) BakeryLinuxSetup.RunSetup();
-        if (GUILayout.Button("Reset Prompt")) BakeryLinuxSetup.ResetPrompt();
         if (GUILayout.Button("Open Log")) OpenLog();
         EditorGUILayout.EndHorizontal();
+
+        BakeryLinuxSetup.ShowSetupAtStart = EditorGUILayout.ToggleLeft("Show setup at start", BakeryLinuxSetup.ShowSetupAtStart);
 
         if (BakeryLinuxProbeRunner.Running)
         {
@@ -109,7 +140,25 @@ public class BakeryMarksModWizard : EditorWindow
 
     static void RestoreBakery()
     {
-        Report(BakeryLinuxPatcher.Restore(), "Bakery restored. Unity will recompile the scripts.");
+        if (!EditorUtility.DisplayDialog(
+            "Bakery / MarksMOD",
+            "This restores all patched Bakery files and removes the MarksMOD folder from Bakery.\n\n" +
+            "Linux plugin shims in Assets/Plugins are kept.\n\nContinue?",
+            "Restore and remove",
+            "Cancel"))
+        {
+            return;
+        }
+
+        var result = BakeryLinuxPatcher.RestoreAndRemoveMod();
+        if (!result.Success)
+        {
+            Report(result, "Bakery restore failed.");
+            return;
+        }
+
+        Debug.Log("[Bakery MarksMOD] Bakery restored and MarksMOD removed from Bakery.\n" + string.Join("\n", result.Messages.ToArray()));
+        EditorUtility.DisplayDialog("Bakery / MarksMOD", "Bakery restored. MarksMOD was removed from Bakery. Unity will recompile.", "OK");
     }
 
     static void Report(BakeryLinuxPatcher.PatchResult result, string successMessage)

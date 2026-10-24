@@ -57,8 +57,10 @@ The prefix defaults to `${XDG_DATA_HOME:-$HOME/.local/share}/bakery/wineprefix`.
 - On load, if Linux setup is incomplete and the user hasn't dismissed it, a dialog offers
   **Setup Wine** / Open Wizard / Don't ask again. Either choice opens the wizard.
 - `Bakery > MarksMOD > Setup Wizard` opens the component checker.
-- `Bakery > MarksMOD > Run Wine Setup` runs `bootstrap.sh` with a progress bar and cancel.
-- `Bakery > MarksMOD > Reset Setup Prompt` re-enables the first-run prompt.
+- **Run Setup** in the wizard runs `bootstrap.sh` with a progress bar and cancel.
+- **Patch Bakery** in the wizard patches the Bakery scripts after setup.
+- **Show setup at start** controls the first-run prompt.
+- **Restore Bakery** restores the patched files and removes the MarksMOD folder from Bakery.
 
 The wizard (`BakeryLinuxDiagnostics`) reports OK/WARN/FAIL per component: Linux editor, runner
 (`BAKERY_RUNNER`/Wine/Proton/umu), winetricks, NVIDIA driver, prefix, VC runtime, DXVK
@@ -67,8 +69,9 @@ The wizard (`BakeryLinuxDiagnostics`) reports OK/WARN/FAIL per component: Linux 
 denoisers, combine tools), and the Unity graphics API.
 
 Setup is considered complete when `$BAKERY_WINEPREFIX/.bakery-setup-ok` exists (written by
-`bootstrap.sh` on success). "Don't ask again" is stored in `EditorPrefs`; it does not mark setup
-complete, so the Bake path still reports missing setup.
+`bootstrap.sh` on success). "Show setup at start" is stored in `EditorPrefs`; disabling it only
+suppresses the startup prompt and does not mark setup complete, so diagnostics still report missing
+setup until the environment is actually installed.
 
 ## Bridge test
 
@@ -201,9 +204,11 @@ BAKERY_RUNNER=umu-run ./probe.sh
 - The non-DX11 host path is used on Linux, so data crosses the bridge as CPU buffers
   (`SetAlphasFromRAM`, `CopyHeightmapsFromRAM`, `SaveGBufferMapFromRAM`), not shared GPU textures.
 - No AMD support (CUDA/OptiX).
-- **xatlas/uvrepack are stubs.** The managed `Default` atlas packer is forced on Linux. Groups
-  that require xatlas (e.g. mixed LOD levels) are unsupported.
-- **`halffloat2vb` is unimplemented** (vertex lightmaps, volumes and probe conversion). It now
-  returns an error instead of silently producing zeroed data.
+- **xatlas is supported** through the host and `libxatlasLib_wine.so`; both pack and unwrap
+  paths are covered. The legacy `uvrepack` alias remains unverified.
+- **`halffloat2vb`/`halffloat2vbm` are implemented** and covered by vertex-lightmap and volume
+  tests.
 - **`ExtractZIP`** (the updater) is unimplemented and now returns an error.
-- The bridge is experimental until a full scene bake passes end to end.
+- **OptiX 5/6 denoiser selections** are mapped to OptiX 7 on Linux. OptiX 7, OIDN v1 and
+  OIDN v2 are supported.
+- The bridge is covered by end-to-end bakes, including Bakery xatlas packing/unwrapping and denoisers.

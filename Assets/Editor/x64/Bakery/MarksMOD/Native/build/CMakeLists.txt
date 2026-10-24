@@ -6,7 +6,7 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_POSITION_INDEPENDENT_CODE ON)
 
 option(BAKERY_BUILD_GLUE "Build libbakery_glue.so" ON)
-option(BAKERY_BUILD_XATLAS "Build libxatlasLib.so" ON)
+option(BAKERY_BUILD_XATLAS_WINE "Build libxatlasLib_wine.so" ON)
 option(BAKERY_BUILD_FRENDER "Build libfrender.so" ON)
 option(BAKERY_FRENDER_WINE "Build libfrender.so as the Wine-bridge proxy" ON)
 option(BAKERY_BUILD_TOOLS "Build CLI tools" OFF)
@@ -25,18 +25,14 @@ if(BAKERY_BUILD_GLUE)
     LIBRARY_OUTPUT_DIRECTORY "${BAKERY_LIB_DIR}")
 endif()
 
-if(BAKERY_BUILD_XATLAS)
-  add_library(xatlasLib SHARED
-    "${BAKERY_ROOT}/third_party/xatlas/xatlas.cpp"
-    "${BAKERY_ROOT}/src/glue/xatlas_bridge.cpp")
-  target_include_directories(xatlasLib PRIVATE
-    "${BAKERY_ROOT}/third_party/xatlas"
-    "${BAKERY_ROOT}/src/glue")
-  target_link_libraries(xatlasLib PRIVATE pthread)
-  target_link_options(xatlasLib PRIVATE
+if(BAKERY_BUILD_XATLAS_WINE)
+  add_library(xatlasLib_wine SHARED "${BAKERY_ROOT}/src/glue/xatlas_wine_proxy.cpp")
+  target_include_directories(xatlasLib_wine PRIVATE "${BAKERY_ROOT}/src/glue" "${BAKERY_ROOT}/src/wine")
+  target_link_libraries(xatlasLib_wine PRIVATE pthread)
+  target_link_options(xatlasLib_wine PRIVATE
     "-Wl,--version-script=${BAKERY_ROOT}/src/glue/xatlasLib.map")
-  set_target_properties(xatlasLib PROPERTIES
-    OUTPUT_NAME xatlasLib
+  set_target_properties(xatlasLib_wine PROPERTIES
+    OUTPUT_NAME xatlasLib_wine
     CXX_VISIBILITY_PRESET hidden
     VISIBILITY_INLINES_HIDDEN ON
     LIBRARY_OUTPUT_DIRECTORY "${BAKERY_LIB_DIR}")
@@ -61,9 +57,9 @@ if(BAKERY_BUILD_TOOLS)
   set_target_properties(ftServer PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${BAKERY_BIN_DIR}")
 endif()
 
-if(BAKERY_BUILD_GLUE AND BAKERY_BUILD_XATLAS AND BAKERY_BUILD_FRENDER)
+if(BAKERY_BUILD_GLUE AND BAKERY_BUILD_XATLAS_WINE AND BAKERY_BUILD_FRENDER)
   add_custom_target(install-libs
     COMMAND bash "${CMAKE_CURRENT_SOURCE_DIR}/install-libs.sh"
-    DEPENDS bakery_glue xatlasLib frender
+    DEPENDS bakery_glue xatlasLib_wine frender
     COMMENT "Installing libs and DllImport aliases into Assets/Plugins/x86_64")
 endif()

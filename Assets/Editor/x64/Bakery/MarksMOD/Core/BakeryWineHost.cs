@@ -10,6 +10,7 @@ public static class BakeryWineHost
 {
     const int Port = 27778;
     const uint Magic = 0x42414B31u;
+    const uint CmdPing = 1u;
     const uint CmdShutdown = 7u;
 
     public static bool IsLinuxEditor
@@ -62,10 +63,45 @@ public static class BakeryWineHost
         }
     }
 
+    public static bool Ping()
+    {
+        if (!IsLinuxEditor) return false;
+        try
+        {
+            using (var client = new TcpClient())
+            {
+                var result = client.BeginConnect("127.0.0.1", Port, null, null);
+                if (!result.AsyncWaitHandle.WaitOne(500)) return false;
+                client.EndConnect(result);
+                client.ReceiveTimeout = 1500;
+                using (var stream = client.GetStream())
+                {
+                    var writer = new BinaryWriter(stream);
+                    writer.Write(Magic);
+                    writer.Write(CmdPing);
+                    writer.Write(0u);
+                    writer.Flush();
+                    var reader = new BinaryReader(stream);
+                    return reader.ReadInt32() == 1;
+                }
+            }
+        }
+        catch
+        {
+            return false;
+        }
+    }
+
     public static bool EnsureStarted()
     {
         if (!IsLinuxEditor) return false;
-        if (IsListening()) return true;
+        if (Ping()) return true;
+
+        if (IsListening())
+        {
+            StopFromPidFile();
+            WaitForPortClosed(10000);
+        }
 
         string script = Path.Combine(ScriptDirectory, "probe.sh");
         string host = Path.Combine(HostDirectory, "bakery_wine_host.exe");
@@ -74,6 +110,15 @@ public static class BakeryWineHost
             Debug.LogWarning("[Bakery] Wine host is missing: " + host);
             return false;
         }
+
+        Environment.SetEnvironmentVariable("BAKERY_WINE_SCRIPT", script);
+        Environment.SetEnvironmentVariable("BAKERY_WINE_HOST", host);
+        string xatlasDll = Path.Combine(Application.dataPath, "Editor/x64/Bakery/scripts/xatlas/xatlasLib.dll");
+        if (string.IsNullOrEmpty(Environment.GetEnvironmentVariable("BAKERY_XATLAS_DLL")))
+            Environment.SetEnvironmentVariable("BAKERY_XATLAS_DLL", xatlasDll);
+        var configuredRunner = Environment.GetEnvironmentVariable("BAKERY_RUNNER");
+        if (!string.IsNullOrEmpty(configuredRunner))
+            Environment.SetEnvironmentVariable("BAKERY_WINE", configuredRunner);
 
         var psi = new ProcessStartInfo
         {
@@ -85,7 +130,12 @@ public static class BakeryWineHost
         };
 
         psi.Environment["BAKERY_WINEPREFIX"] = PrefixPath;
+        psi.Environment["BAKERY_WINE_SCRIPT"] = script;
+        psi.Environment["BAKERY_WINE_HOST"] = host;
+        xatlasDll = Environment.GetEnvironmentVariable("BAKERY_XATLAS_DLL");
+        if (!string.IsNullOrEmpty(xatlasDll)) psi.Environment["BAKERY_XATLAS_DLL"] = xatlasDll;
         CopyEnvironment(psi, "BAKERY_RUNNER");
+        CopyEnvironment(psi, "BAKERY_WINE");
         CopyEnvironment(psi, "DXVK_CONFIG");
         CopyEnvironment(psi, "VK_ICD_FILENAMES");
         CopyEnvironment(psi, "WINEDLLOVERRIDES");
@@ -94,7 +144,7 @@ public static class BakeryWineHost
         {
             using (var process = Process.Start(psi))
             {
-                if (process != null) process.WaitForExit(20000);
+                if (process != null) process.WaitForExit(120000);
             }
         }
         catch (Exception e)
@@ -102,18 +152,22 @@ public static class BakeryWineHost
             Debug.LogWarning("[Bakery] Could not start Wine host: " + e.Message);
         }
 
-        return IsListening();
+        if (Ping()) return true;
+        Debug.LogWarning("[Bakery] Wine host did not become ready. See /tmp/bakery_wine_host.log");
+        return false;
     }
 
     public static void Stop()
     {
-        if (!IsLinuxEditor || !IsListening()) return;
+        if (!IsLinuxEditor) return;
+        if (!IsListening() && !Ping()) return;
 
         try
         {
             using (var client = new TcpClient())
             {
                 client.Connect("127.0.0.1", Port);
+                client.ReceiveTimeout = 1500;
                 using (var stream = client.GetStream())
                 {
                     var writer = new BinaryWriter(stream);
@@ -128,15 +182,37 @@ public static class BakeryWineHost
         }
         catch { }
 
-        for (int i = 0; i < 20 && IsListening(); i++)
+        WaitForPortClosed(10000);
+
+        if (IsListening())
+        {
+            StopFromPidFile();
+            WaitForPortClosed(5000);
+        }
+
+        if (IsListening()) KillFromPidFile();
+    }
+
+    static void WaitForPortClosed(int milliseconds)
+    {
+        int steps = System.Math.Max(1, milliseconds / 100);
+        for (int i = 0; i < steps && IsListening(); i++)
         {
             System.Threading.Thread.Sleep(100);
         }
-
-        if (IsListening()) StopFromPidFile();
     }
 
     static void StopFromPidFile()
+    {
+        SignalPidFile("-TERM");
+    }
+
+    static void KillFromPidFile()
+    {
+        SignalPidFile("-KILL");
+    }
+
+    static void SignalPidFile(string signal)
     {
         try
         {
@@ -148,7 +224,7 @@ public static class BakeryWineHost
             var psi = new ProcessStartInfo
             {
                 FileName = "kill",
-                Arguments = "-TERM " + pid,
+                Arguments = signal + " " + pid,
                 UseShellExecute = false,
                 CreateNoWindow = true
             };

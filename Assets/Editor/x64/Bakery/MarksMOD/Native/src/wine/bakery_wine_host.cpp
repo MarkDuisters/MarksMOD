@@ -16,6 +16,11 @@
 #include <cstring>
 #include <string>
 #include <vector>
+#include <unordered_map>
+#include <algorithm>
+#include <atomic>
+#include <thread>
+#include <mutex>
 
 namespace {
 
@@ -34,6 +39,17 @@ using FnSaveGBufferMapFromRAM = int (*)(const uint8_t*, int, const ft_utf8*, ft_
 using FnSaveCookieFromRAM = void (*)(FTTexInput, const ft_utf8*);
 using FnSetBool = void (*)(ft_bool);
 using FnSetInt = void (*)(int);
+using FnXCreate = void* (__cdecl*)();
+using FnXAddMesh = int (__cdecl*)(void*, int, const void*, const void*, const void*, int, const int*);
+using FnXAddUVMesh = int (__cdecl*)(void*, int, const void*, int, const int*, int32_t);
+using FnXParametrize = void (__cdecl*)(void*);
+using FnXPack = void (__cdecl*)(void*, int, float, int, int, int, int32_t, int32_t);
+using FnXNormalize = void (__cdecl*)(void*, const int*, int32_t);
+using FnXGetCount = int (__cdecl*)(void*);
+using FnXGetMeshCount = int (__cdecl*)(void*, int);
+using FnXGetIndex = int (__cdecl*)(void*, int, int);
+using FnXGetData = void (__cdecl*)(void*, int, void*, void*, void*);
+using FnXClear = int (__cdecl*)(void*);
 
 std::string exe_dir()
 {
@@ -58,6 +74,112 @@ std::string payload_dir()
 }
 
 const uint32_t MAX_FRAME = 512u * 1024u * 1024u;
+const int32_t XATLAS_SETUP_ERROR = -100;
+
+std::unordered_map<uint64_t, void*> g_xatlas;
+uint64_t g_next_xatlas = 1;
+std::mutex g_command_lock;
+
+template <typename T> T xproc(HMODULE module, const char* name)
+{
+    return module ? (T)GetProcAddress(module, name) : nullptr;
+}
+
+bool xread_handle(bakery_ipc::Reader& r, uint64_t& id, void*& atlas)
+{
+    if (!r.raw(&id, sizeof(id))) return false;
+    auto it = g_xatlas.find(id);
+    atlas = it == g_xatlas.end() ? nullptr : it->second;
+    return atlas != nullptr;
+}
+
+int32_t handle_xatlas(uint32_t cmd, const std::vector<uint8_t>& payload, HMODULE module,
+                      FnXCreate create, FnXAddMesh addMesh, FnXAddUVMesh addUvMesh,
+                      FnXParametrize parametrize, FnXPack pack, FnXNormalize normalize,
+                      FnXGetCount getCount, FnXGetMeshCount getVertexCount, FnXGetMeshCount getIndexCount,
+                      FnXGetIndex getIndex, FnXGetData getData,
+                      FnXClear clear, std::vector<uint8_t>& response)
+{
+    if (!module || !create || !addMesh || !addUvMesh || !parametrize || !pack ||
+        !normalize || !getCount || !getVertexCount || !getIndexCount || !getIndex || !getData || !clear) return XATLAS_SETUP_ERROR;
+    bakery_ipc::Reader r(payload.data(), payload.size());
+    bakery_ipc::Writer out;
+    uint64_t id = 0;
+    void* atlas = nullptr;
+    if (cmd == CMD_XATLAS_CREATE)
+    {
+        atlas = create();
+        if (!atlas) return -1;
+        id = g_next_xatlas++;
+        if (id == 0) id = g_next_xatlas++;
+        g_xatlas[id] = atlas;
+        out.raw(&id, sizeof(id));
+        response.swap(out.data);
+        return 0;
+    }
+    if (!xread_handle(r, id, atlas)) return -101;
+
+    if (cmd == CMD_XATLAS_ADD_MESH)
+    {
+        int32_t vertices = 0, indices = 0; uint8_t hasNormals = 0, hasUv = 0;
+        if (!r.i32(vertices) || vertices < 0 || !r.u8(hasNormals) || !r.u8(hasUv) ||
+            !r.i32(indices) || indices < 0 || indices > (int32_t)(MAX_FRAME / 4)) return -2;
+        size_t pbytes = (size_t)vertices * 12, nbytes = hasNormals ? (size_t)vertices * 12 : 0;
+        size_t ubytes = hasUv ? (size_t)vertices * 8 : 0, ibytes = (size_t)indices * 4;
+        if (pbytes + nbytes + ubytes + ibytes > MAX_FRAME) return -2;
+        std::vector<uint8_t> p(pbytes), n(nbytes), u(ubytes), i(ibytes);
+        if (!r.raw(p.data(), pbytes) || !r.raw(n.data(), nbytes) || !r.raw(u.data(), ubytes) || !r.raw(i.data(), ibytes)) return -2;
+        return addMesh(atlas, vertices, p.data(), hasNormals ? n.data() : nullptr, hasUv ? u.data() : nullptr, indices, (const int*)i.data());
+    }
+    if (cmd == CMD_XATLAS_ADD_UV_MESH)
+    {
+        int32_t vertices = 0, indices = 0, rotate = 0;
+        if (!r.i32(vertices) || vertices < 0 || !r.i32(indices) || indices < 0 || !r.i32(rotate)) return -2;
+        size_t ubytes = (size_t)vertices * 8, ibytes = (size_t)indices * 4;
+        if (ubytes + ibytes > MAX_FRAME) return -2;
+        std::vector<uint8_t> u(ubytes), i(ibytes);
+        if (!r.raw(u.data(), ubytes) || !r.raw(i.data(), ibytes)) return -2;
+        return addUvMesh(atlas, vertices, u.data(), indices, (const int*)i.data(), rotate);
+    }
+    if (cmd == CMD_XATLAS_PARAMETRIZE) { parametrize(atlas); return 0; }
+    if (cmd == CMD_XATLAS_PACK)
+    {
+        int32_t attempts = 0, resolution = 0, maxChart = 0, padding = 0, brute = 0, block = 0; float tpu = 0;
+        if (!r.i32(attempts) || !r.f32(tpu) || !r.i32(resolution) || !r.i32(maxChart) || !r.i32(padding) || !r.i32(brute) || !r.i32(block)) return -2;
+        pack(atlas, attempts, tpu, resolution, maxChart, padding, brute, block); return 0;
+    }
+    if (cmd == CMD_XATLAS_NORMALIZE)
+    {
+        int32_t density = 0, count = -1;
+        if (!r.i32(density) || !r.i32(count) || count < -1 || count > 65536) return -2;
+        std::vector<int32_t> sizes(count > 0 ? (size_t)count : 0);
+        if (count > 0 && !r.raw(sizes.data(), sizes.size() * sizeof(int32_t))) return -2;
+        normalize(atlas, count > 0 ? sizes.data() : nullptr, density); response.swap(out.data); if (count > 0) response.assign((uint8_t*)sizes.data(), (uint8_t*)sizes.data() + sizes.size() * sizeof(int32_t)); return 0;
+    }
+    if (cmd == CMD_XATLAS_GET_ATLAS_COUNT) { int32_t v = getCount(atlas); out.i32(v); response.swap(out.data); return 0; }
+    if (cmd == CMD_XATLAS_GET_ATLAS_INDEX || cmd == CMD_XATLAS_GET_VERTEX_COUNT || cmd == CMD_XATLAS_GET_INDEX_COUNT)
+    {
+        int32_t mesh = 0, chart = 0; if (!r.i32(mesh)) return -2;
+        int32_t v = 0;
+        if (cmd == CMD_XATLAS_GET_ATLAS_INDEX) { if (!r.i32(chart)) return -2; v = getIndex(atlas, mesh, chart); }
+        else if (cmd == CMD_XATLAS_GET_VERTEX_COUNT) v = getVertexCount(atlas, mesh);
+        else v = getIndexCount(atlas, mesh);
+        out.i32(v); response.swap(out.data); return 0;
+    }
+    if (cmd == CMD_XATLAS_GET_DATA)
+    {
+        int32_t mesh = 0; if (!r.i32(mesh)) return -2;
+        int32_t vertices = 0, indices = 0; // host obtains sizes before allocating output buffers.
+        // The caller supplies the sizes obtained through the query commands.
+        if (!r.i32(vertices) || !r.i32(indices) || vertices < 0 || indices < 0) return -2;
+        if ((uint64_t)vertices * 8 + (uint64_t)vertices * 4 + (uint64_t)indices * 4 > MAX_FRAME) return -2;
+        std::vector<float> uv((size_t)vertices * 2); std::vector<uint32_t> refs(vertices), inds(indices);
+        getData(atlas, mesh, uv.data(), refs.data(), inds.data());
+        out.i32(vertices); out.i32(indices); out.raw(uv.data(), uv.size() * sizeof(float)); out.raw(refs.data(), refs.size() * sizeof(uint32_t)); out.raw(inds.data(), inds.size() * sizeof(uint32_t)); response.swap(out.data); return 0;
+    }
+    if (cmd == CMD_XATLAS_CLEAR) { int32_t result = clear(atlas); g_xatlas.erase(id); return result; }
+    return -3;
+}
 
 std::vector<FTTexInput> g_alphaTex;
 std::vector<std::vector<uint8_t>> g_alphaBuffers;
@@ -315,6 +437,36 @@ int main()
     std::string dir = payload_dir();
     SetCurrentDirectoryA(dir.c_str());
 
+    WSADATA wsa;
+    if (WSAStartup(MAKEWORD(2, 2), &wsa) != 0)
+    {
+        std::fprintf(stderr, "bakery_wine_host: WSAStartup failed\n");
+        return 1;
+    }
+
+    SOCKET srv = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
+    if (srv == INVALID_SOCKET)
+    {
+        std::fprintf(stderr, "bakery_wine_host: socket failed\n");
+        WSACleanup();
+        return 1;
+    }
+
+    int reuse = 1;
+    setsockopt(srv, SOL_SOCKET, SO_REUSEADDR, (const char*)&reuse, sizeof(reuse));
+    sockaddr_in addr = {};
+    addr.sin_family = AF_INET;
+    addr.sin_addr.s_addr = htonl(INADDR_LOOPBACK);
+    addr.sin_port = htons(BAKERY_WINE_PORT);
+    if (bind(srv, (sockaddr*)&addr, sizeof(addr)) != 0 || listen(srv, 4) != 0)
+    {
+        std::fprintf(stderr, "bakery_wine_host: port %d already owned or bind/listen failed; exiting\n", BAKERY_WINE_PORT);
+        closesocket(srv);
+        WSACleanup();
+        return 2;
+    }
+    std::fprintf(stderr, "bakery_wine_host: listening on 127.0.0.1:%d\n", BAKERY_WINE_PORT);
+
     HMODULE uvgb = LoadLibraryA((dir + "uvgbuffergen.dll").c_str());
     HMODULE abg = LoadLibraryA((dir + "alphabuffergen.dll").c_str());
     if (!uvgb) std::fprintf(stderr, "bakery_wine_host: failed to load uvgbuffergen.dll (error %lu)\n", GetLastError());
@@ -326,6 +478,26 @@ int main()
         std::fprintf(stderr, "bakery_wine_host: failed to load %sfrender.dll (error %lu)\n", dir.c_str(), GetLastError());
         return 1;
     }
+
+    std::string xatlasPath;
+    char xatlasOverride[MAX_PATH];
+    DWORD xatlasLen = GetEnvironmentVariableA("BAKERY_XATLAS_DLL", xatlasOverride, MAX_PATH);
+    if (xatlasLen > 0 && xatlasLen < MAX_PATH) xatlasPath.assign(xatlasOverride, xatlasLen);
+    else xatlasPath = dir + "scripts\\xatlas\\xatlasLib.dll";
+    HMODULE xatlasLib = LoadLibraryA(xatlasPath.c_str());
+    if (!xatlasLib) std::fprintf(stderr, "bakery_wine_host: xatlas DLL unavailable at %s (error %lu)\n", xatlasPath.c_str(), GetLastError());
+    auto xCreate = xproc<FnXCreate>(xatlasLib, "xatlasCreateAtlas");
+    auto xAddMesh = xproc<FnXAddMesh>(xatlasLib, "xatlasAddMesh");
+    auto xAddUvMesh = xproc<FnXAddUVMesh>(xatlasLib, "xatlasAddUVMesh");
+    auto xParametrize = xproc<FnXParametrize>(xatlasLib, "xatlasParametrize");
+    auto xPack = xproc<FnXPack>(xatlasLib, "xatlasPack");
+    auto xNormalize = xproc<FnXNormalize>(xatlasLib, "xatlasNormalize");
+    auto xGetAtlasCount = xproc<FnXGetCount>(xatlasLib, "xatlasGetAtlasCount");
+    auto xGetAtlasIndex = xproc<FnXGetIndex>(xatlasLib, "xatlasGetAtlasIndex");
+    auto xGetVertexCount = xproc<FnXGetMeshCount>(xatlasLib, "xatlasGetVertexCount");
+    auto xGetIndexCount = xproc<FnXGetMeshCount>(xatlasLib, "xatlasGetIndexCount");
+    auto xGetData = xproc<FnXGetData>(xatlasLib, "xatlasGetData");
+    auto xClear = xproc<FnXClear>(xatlasLib, "xatlasClear");
 
     auto fnSetGfx = (FnUnitySetGraphicsDevice)GetProcAddress(lib, "UnitySetGraphicsDevice");
     void* d3dDevice = create_d3d11_device();
@@ -351,64 +523,63 @@ int main()
     auto fnSetUVGBTangents = (FnSetInt)GetProcAddress(lib, "SetUVGBTangents");
     auto fnToggleABGDither = (FnSetInt)GetProcAddress(lib, "ToggleABGDither");
 
-    WSADATA wsa;
-    if (WSAStartup(MAKEWORD(2, 2), &wsa) != 0)
-    {
-        std::fprintf(stderr, "bakery_wine_host: WSAStartup failed\n");
-        return 1;
-    }
-
-    SOCKET srv = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
-    if (srv == INVALID_SOCKET)
-    {
-        std::fprintf(stderr, "bakery_wine_host: socket failed\n");
-        return 1;
-    }
-
-    int reuse = 1;
-    setsockopt(srv, SOL_SOCKET, SO_REUSEADDR, (const char*)&reuse, sizeof(reuse));
-
-    sockaddr_in addr = {};
-    addr.sin_family = AF_INET;
-    addr.sin_addr.s_addr = htonl(INADDR_LOOPBACK);
-    addr.sin_port = htons(BAKERY_WINE_PORT);
-
-    if (bind(srv, (sockaddr*)&addr, sizeof(addr)) != 0 || listen(srv, 4) != 0)
-    {
-        std::fprintf(stderr, "bakery_wine_host: bind/listen failed\n");
-        return 1;
-    }
-
-    std::fprintf(stderr, "bakery_wine_host: listening on 127.0.0.1:%d\n", BAKERY_WINE_PORT);
-
-    bool running = true;
-    while (running)
+    std::atomic<bool> running(true);
+    while (running.load())
     {
         SOCKET cli = accept(srv, nullptr, nullptr);
         if (cli == INVALID_SOCKET) continue;
 
+        int noDelay = 1;
+        setsockopt(cli, IPPROTO_TCP, TCP_NODELAY, (const char*)&noDelay, sizeof(noDelay));
+
+        std::thread([&, cli]()
+        {
+
         DWORD rcvTimeout = 60000;
         setsockopt(cli, SOL_SOCKET, SO_RCVTIMEO, (const char*)&rcvTimeout, sizeof(rcvTimeout));
 
-        while (running)
+        while (running.load())
         {
             BakeryIpcHeader h = {};
             if (!recv_all(cli, &h, sizeof(h))) break;
             if (h.magic != BAKERY_IPC_MAGIC) break;
             if (h.len > MAX_FRAME) break;
 
+            if (GetEnvironmentVariableA("BAKERY_XATLAS_IPC_LOG", nullptr, 0) > 0)
+            {
+                char logValue[8] = {};
+                GetEnvironmentVariableA("BAKERY_XATLAS_IPC_LOG", logValue, sizeof(logValue));
+                if (std::strcmp(logValue, "1") == 0)
+                    std::fprintf(stderr, "bakery_wine_host ipc <- %s (%u)\n", bakery_ipc::command_name(h.cmd), h.cmd);
+            }
+
             std::vector<uint8_t> payload(h.len);
             if (h.len > 0 && !recv_all(cli, payload.data(), (int)h.len)) break;
 
             if (h.cmd == CMD_SHUTDOWN)
             {
-                running = false;
+                std::lock_guard<std::mutex> shutdownGuard(g_command_lock);
+                running.store(false);
+                closesocket(srv);
                 int32_t status = 0;
                 send_all(cli, &status, sizeof(status));
                 break;
             }
 
             int32_t status;
+            std::vector<uint8_t> xresponse;
+            std::lock_guard<std::mutex> commandGuard(g_command_lock);
+            const bool isXatlas = h.cmd >= CMD_XATLAS_CREATE && h.cmd <= CMD_XATLAS_CLEAR;
+            if (isXatlas)
+            {
+                status = handle_xatlas(h.cmd, payload, xatlasLib, xCreate, xAddMesh, xAddUvMesh,
+                    xParametrize, xPack, xNormalize, xGetAtlasCount, xGetVertexCount,
+                    xGetIndexCount, xGetAtlasIndex, xGetData, xClear, xresponse);
+                uint32_t responseLen = (uint32_t)xresponse.size();
+                if (!send_all(cli, &status, sizeof(status)) || !send_all(cli, &responseLen, sizeof(responseLen)) ||
+                    (responseLen > 0 && !send_all(cli, xresponse.data(), responseLen))) break;
+                continue;
+            }
             if (h.cmd == CMD_SET_COMPRESSION)
             {
                 status = handle_command(h.cmd, payload, fnInit, fnLoadScene, fnRenderEvent, fnUVGB, fnAlpha,
@@ -451,6 +622,7 @@ int main()
 
         shutdown(cli, SD_BOTH);
         closesocket(cli);
+        }).detach();
     }
 
     closesocket(srv);

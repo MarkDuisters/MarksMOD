@@ -8,32 +8,52 @@ HOST = "127.0.0.1"
 PORT = 27778
 MAGIC = 0x42414B31
 CMD_PING = 1
+CMD_SHUTDOWN = 7
 
 
-def port_open(timeout=0.5):
+def send_command(cmd, timeout=2.0):
     try:
-        with socket.create_connection((HOST, PORT), timeout=timeout):
-            return True
+        with socket.create_connection((HOST, PORT), timeout=timeout) as sock:
+            sock.settimeout(timeout)
+            sock.sendall(struct.pack("<III", MAGIC, cmd, 0))
+            data = sock.recv(4)
+            if len(data) != 4:
+                return None
+            return struct.unpack("<i", data)[0]
     except OSError:
-        return False
+        return None
 
 
 def ping():
-    with socket.create_connection((HOST, PORT), timeout=5) as sock:
-        sock.sendall(struct.pack("<III", MAGIC, CMD_PING, 0))
-        data = sock.recv(4)
-        if len(data) != 4:
-            return 2
-        status = struct.unpack("<i", data)[0]
-        print("ping status:", status)
-        return 0 if status == 1 else 3
+    status = send_command(CMD_PING)
+    if status is None:
+        return 2
+    print("ping status:", status)
+    return 0 if status == 1 else 3
+
+
+def stop():
+    status = send_command(CMD_SHUTDOWN)
+    if status is None:
+        return 2
+    print("shutdown status:", status)
+    return 0 if status == 0 else 3
+
+
+def wait(timeout=120.0):
+    deadline = time.time() + timeout
+    while time.time() < deadline:
+        if send_command(CMD_PING, 0.5) == 1:
+            return 0
+        time.sleep(0.25)
+    return 1
 
 
 if __name__ == "__main__":
-    if len(sys.argv) > 1 and sys.argv[1] == "--wait":
-        for _ in range(40):
-            if port_open():
-                sys.exit(0)
-            time.sleep(0.5)
-        sys.exit(1)
+    action = sys.argv[1] if len(sys.argv) > 1 else None
+    if action == "--wait":
+        timeout = float(sys.argv[2]) if len(sys.argv) > 2 else 120.0
+        sys.exit(wait(timeout))
+    if action == "--stop":
+        sys.exit(stop())
     sys.exit(ping())

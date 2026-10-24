@@ -8,7 +8,7 @@ using UnityEngine;
 
 public static class BakeryLinuxPatcher
 {
-    public const int PatchVersion = 10;
+    public const int PatchVersion = 13;
 
     static readonly string[] Targets =
     {
@@ -162,10 +162,42 @@ public static class BakeryLinuxPatcher
 
     public static PatchResult Restore()
     {
-        return RestoreFrom(ScriptsDirectory, BackupDirectory);
+        return RestoreFrom(ScriptsDirectory, BackupDirectory, true);
     }
 
-    public static PatchResult RestoreFrom(string scriptsDirectory, string backupDirectory)
+    public static PatchResult RestoreAndRemoveMod()
+    {
+        var result = RestoreFrom(ScriptsDirectory, BackupDirectory, false);
+        if (!result.Success) return result;
+
+        const string modAssetPath = "Assets/Editor/x64/Bakery/MarksMOD";
+        try
+        {
+            if (AssetDatabase.IsValidFolder(modAssetPath))
+            {
+                if (!AssetDatabase.DeleteAsset(modAssetPath))
+                {
+                    result.Errors.Add("Could not delete " + modAssetPath);
+                }
+            }
+        }
+        catch (Exception e)
+        {
+            result.Errors.Add("Could not delete " + modAssetPath + ": " + e.Message);
+        }
+
+        if (result.Errors.Count == 0)
+        {
+            result.Messages.Add("Removed " + modAssetPath);
+            result.Changed = true;
+            AssetDatabase.Refresh(ImportAssetOptions.ForceUpdate);
+        }
+
+        result.Success = result.Errors.Count == 0;
+        return result;
+    }
+
+    public static PatchResult RestoreFrom(string scriptsDirectory, string backupDirectory, bool refresh = true)
     {
         var result = new PatchResult();
         if (!Directory.Exists(backupDirectory))
@@ -197,7 +229,7 @@ public static class BakeryLinuxPatcher
             }
         }
 
-        if (result.Errors.Count == 0 && result.Changed && IsInsideProject(scriptsDirectory))
+        if (refresh && result.Errors.Count == 0 && result.Changed && IsInsideProject(scriptsDirectory))
         {
             AssetDatabase.Refresh(ImportAssetOptions.ForceUpdate);
             AssetDatabase.SaveAssets();
