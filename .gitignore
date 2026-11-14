@@ -1,0 +1,9 @@
+# Native build output: keep only the prebuilt Wine host.
+**/dist~/**
+!**/dist~/bin/
+!**/dist~/bin/bakery_wine_host.exe
+**/__pycache__/
+**/Native/tmp*/
+**/Native/tmp*.meta
+**/Native/backup~/
+**/Native/build/out/
