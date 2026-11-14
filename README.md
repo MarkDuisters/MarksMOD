@@ -4,10 +4,6 @@ Version: 1.1.0
 
 MarksMOD adds a Linux/Wine compatibility layer to an existing Bakery installation. It does not contain Bakery itself and does not include Bakery addon files.
 
-## Screenshots
-
-![MarksMOD setup wizard](docs/images/image01.png)
-
 ## Requirements
 
 - Linux editor with Unity (tested with 6000.3.22f1 and URP 17.3).
@@ -51,9 +47,32 @@ Two-level LOD groups are tested. Very large meshes and the 32-bit index guard ar
 
 ## Notes
 
-- The prebuilt `bakery_wine_host.exe` is included under `MarksMOD/Native/dist~/bin`.
+- The prebuilt `bakery_wine_host.exe` under `MarksMOD/Native/dist~/bin` is required at runtime; the setup wizard does not build it. It is a Windows helper launched through your system Wine (`/usr/bin/wine` by default), which is why Wine must be installed separately.
 - The Linux plugin shims are provided under `Assets/Plugins/x86_64`.
 - D3D11 tools (seamfixer, denoisers, buffer generators) are launched through Wine with explicit DXVK DLL overrides and the configured Wine prefix.
 - The Wine host starts with the editor and stays available for import-time xatlas work; it shuts down when the editor quits.
 - Bakery UI is left native: use Bakery's Experimental settings for the global Atlas Packer and the Lightmap Group asset inspector for per-group overrides.
 - Do not redistribute the Bakery addon or its native payload. Users must install Bakery themselves.
+
+## Screenshots
+
+Bakery menu entry and the MarksMOD setup wizard:
+
+![Bakery menu with the MarksMOD submenu](docs/images/bakery-menu-marksmod.png)
+![Setup wizard after patching Bakery](docs/images/wizard-patched.png)
+![Activating Bakery's built-in xatlas backend](docs/images/wizard-xatlas.png)
+![Wizard environment checks and probe output](docs/images/wizard-checks.png)
+
+Baking in the test scene:
+
+![Bakery render window in RTX mode](docs/images/render-window.png)
+![Bakery Progress window during a bake](docs/images/bake-progress.png)
+![Bakery render window after a re-bake](docs/images/render-window-baked.png)
+![Baked lightmaps applied to the test scene](docs/images/bake-result.png)
+
+[Wizard walkthrough (WebM, 3.8 s)](docs/images/wizard-walkthrough.webm)
+
+Tested system:
+
+![System information: Manjaro, KDE Plasma, Ryzen 9 9900X, RTX 4070 Ti SUPER](docs/images/system-info.png)
+
