@@ -68,7 +68,7 @@ Unity would import them as native plugins and report duplicate names alongside
 `Assets/Plugins/x86_64`. `install-libs` publishes the loadable copies to `Assets/Plugins/x86_64`.
 
 Outputs land in `dist~/lib` and `dist~/bin`; `install-libs` publishes the loadable plugins.
-`bakery_wine_host.exe` is shipped **prebuilt** in `dist~/bin` (CI: `.github/workflows/build-wine-host.yml`).
+`bakery_wine_host.exe` is shipped **prebuilt** in `dist~/bin`; rebuild it locally with `wine/build-host.sh`.
 `wine/build-host.sh` auto-fetches a Linux-hosted `llvm-mingw` toolchain if no cross compiler is found.
 Without `BAKERY_FRENDER_WINE=ON`, `libfrender.so` is a failing stub.
 

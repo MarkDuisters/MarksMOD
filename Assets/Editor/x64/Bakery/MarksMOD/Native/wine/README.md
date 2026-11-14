@@ -157,7 +157,7 @@ if needed and sends `CMD_PING`.
 ## Host binary: ship it, don't build it
 
 `bakery_wine_host.exe` is our own code, so it is shipped **prebuilt** in
-`MarksMOD/Native/dist~/bin/bakery_wine_host.exe`. End users do not need a compiler. Developers/CI
+`MarksMOD/Native/dist~/bin/bakery_wine_host.exe`. End users do not need a compiler. Developers
 rebuild it with `build-host.sh`:
 
 ```
@@ -167,9 +167,8 @@ rebuild it with `build-host.sh`:
 The script uses a system `x86_64-w64-mingw32-g++` if present; otherwise it downloads a
 Linux-hosted `llvm-mingw` toolchain into `~/.local/share/bakery/mingw` (no sudo required).
 
-CI: `.github/workflows/build-wine-host.yml` builds and uploads the binary on every push. Release
-packaging copies it into `dist~/bin/`. The repo keeps the source and the build script; the binary is
-an artifact, not hand-maintained.
+Release packaging copies the locally built binary into `dist~/bin/`. The repo keeps the source, the
+build script and the prebuilt binary; there is no CI build.
 
 ## Runners: Wine, Proton, umu
 
