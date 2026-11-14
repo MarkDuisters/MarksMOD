@@ -4,6 +4,10 @@ Version: 1.01
 
 MarksMOD adds a Linux/Wine compatibility layer to an existing Bakery installation. It does not contain Bakery itself and does not include Bakery addon files.
 
+## Screenshots
+
+![MarksMOD setup wizard](docs/images/image01.png)
+
 ## Requirements
 
 - Linux editor with Unity (tested with 6000.3.22f1 and URP 17.3).
