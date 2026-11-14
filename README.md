@@ -66,11 +66,9 @@ Bakery menu entry and the MarksMOD setup wizard:
 Baking in the test scene:
 
 ![Bakery render window in RTX mode](docs/images/render-window.png)
-![Bakery Progress window during a bake](docs/images/bake-progress.png)
+![Bakery Progress window during a bake (animated)](docs/images/bake-progress.gif)
 ![Bakery render window after a re-bake](docs/images/render-window-baked.png)
 ![Baked lightmaps applied to the test scene](docs/images/bake-result.png)
-
-[Wizard walkthrough (WebM, 3.8 s)](docs/images/wizard-walkthrough.webm)
 
 Tested system:
 
