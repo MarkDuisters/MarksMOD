@@ -22,13 +22,13 @@ MarksMOD is a Linux/Wine compatibility layer for an existing Bakery installation
 
 `Restore Bakery` restores the original Bakery files from the stored backups and removes the `MarksMOD` folder from Bakery. The Linux plugin shims in `Assets/Plugins` are kept.
 
-The current patcher version is 17 and targets eight Bakery files.
+The current patcher version is 18 and targets seven Bakery files.
 
 ## Tested scope
 
 The tested configuration is Linux with an NVIDIA GPU, URP and RTX9 (`ftraceRTX9`).
 
-The test suite covers:
+Validation covered:
 
 - Bake modes: full lighting, indirect, shadowmask, distance shadowmask, subtractive, AO-only and directional modes.
 - Scene features: light types, volumes, sectors, prefabs, transparency, light probes and reflection probes.
@@ -49,7 +49,7 @@ Two-level LOD groups are tested. Very large meshes and the 32-bit index guard ar
 - The in-editor Bakery updater (`ExtractZIP`) is not implemented.
 - OptiX 5 and OptiX 6 denoiser selections are mapped to OptiX 7 on Linux because the legacy denoisers are not supported by the Wine bridge. OptiX 7, OIDN v1 and OIDN v2 run through their normal backends.
 - ECS, terrain, skinned meshes, APV and probe-SH directional mode have no test fixtures and are not claimed as supported.
-- The assembled-prefab example is not bakeable by design; use the prefab bake test case instead.
+- The assembled-prefab example is not bakeable by design; bake prefab assets through Bakery's prefab workflow instead.
 - Interactive progress and wizard behavior were verified in a GUI editor session. Batchmode runs do not report progress.
 - The Built-in render pipeline is out of scope; the tested pipeline is URP.
 - Pixel-level parity between Windows and Linux was verified for the tested scenes; re-check new scenes after driver or Bakery changes.

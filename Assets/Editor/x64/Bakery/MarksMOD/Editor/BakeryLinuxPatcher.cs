@@ -8,7 +8,7 @@ using UnityEngine;
 
 public static class BakeryLinuxPatcher
 {
-    public const int PatchVersion = 17;
+    public const int PatchVersion = 18;
 
     static readonly string[] Targets =
     {
@@ -18,8 +18,12 @@ public static class BakeryLinuxPatcher
         "ftUpdater.cs",
         "ftBuildGraphics.cs",
         "ftRenderLightmap.cs",
-        "ftModelPostProcessor.cs",
         "ftClearCache.cs"
+    };
+
+    static readonly string[] LegacyTargets =
+    {
+        "ftModelPostProcessor.cs"
     };
 
     public static IReadOnlyList<string> PatchTargets
@@ -206,11 +210,19 @@ public static class BakeryLinuxPatcher
             return result;
         }
 
-        foreach (var name in Targets)
+        var restoreTargets = new List<string>(Targets);
+        restoreTargets.AddRange(LegacyTargets);
+
+        foreach (var name in restoreTargets)
         {
             string[] backups = Directory.GetFiles(backupDirectory, name + ".*.bak");
             if (backups.Length == 0)
             {
+                if (Array.IndexOf(LegacyTargets, name) >= 0)
+                {
+                    result.Messages.Add(name + ": no backup; skipped");
+                    continue;
+                }
                 result.Errors.Add(name + ": no backup");
                 continue;
             }

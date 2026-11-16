@@ -1,24 +1,22 @@
 # Bakery Linux native layer
 
 Surface-layer replacement for the Windows-only Bakery native payload. Nothing here modifies
-the add-on logic; it provides ABI-identical Linux libraries and tool executables that the
-managed code reaches through a `DllImport` resolver (`MarksMOD/Editor/BakeryLinuxBootstrap.cs`).
+the add-on logic; it provides ABI-identical Linux libraries that the managed code reaches
+through the `DllImport` names mapped by Mono.
 
 ## Layout
 
 ```
 MarksMOD/Native/
-  src/glue/      libbakery_glue.so   CPU/OS shim (process, progress, user32, half2vb, uvrepack, zip)
-                  libxatlasLib.so     ABI proxy to Bakery's Windows xatlasLib.dll
-  src/frender/   libfrender.so       ABI proxy to the Wine-hosted frender.dll (or stub)
-  src/wine/      bakery_wine_host    Wine worker: loads real frender.dll, serves IPC
-  src/ftrace/    ftrace*             (unused in the Wine path; kept for the native contingency)
-  src/tools/     combine*, ftServer, seamfixer, ...   CLI helpers
+  src/glue/      libbakery_glue.so       CPU/OS shim (process, progress, user32, half2vb, uvrepack, zip)
+                  libxatlasLib_wine.so     ABI proxy to Bakery's Windows xatlasLib.dll
+  src/frender/   libfrender.so           ABI proxy to the Wine-hosted frender.dll
+  src/wine/      bakery_wine_host        Wine worker: loads real frender.dll, serves IPC
   wine/          bootstrap/probe/build scripts for the Wine bridge
   build/         CMake build
-  third_party/   pinned dependency notes
+  third_party/   dependency notes
   dist~/lib/      built shared libraries (Unity-ignored; install-libs copies them)
-  dist~/bin/      built tool executables (Unity-ignored)
+  dist~/bin/      prebuilt Wine host (Unity-ignored)
 ```
 
 The engine stays Bakery's original Windows binaries. They run under Wine; `libfrender.so` is a
@@ -55,7 +53,7 @@ or `${BAKERY_FRENDER_DIR}/scripts\\xatlas\\xatlasLib.dll`.
 ## Build
 
 ```
-cmake -S build -B build/out -DCMAKE_BUILD_TYPE=Release -DBAKERY_FRENDER_WINE=ON
+cmake -S build -B build/out -DCMAKE_BUILD_TYPE=Release
 cmake --build build/out -j
   cmake --build build/out --target install-libs   # copies the xatlas proxy + aliases to Assets/Plugins/x86_64
 
@@ -67,10 +65,9 @@ Folders ending in `~` are ignored by Unity. That is why build outputs live in `d
 Unity would import them as native plugins and report duplicate names alongside
 `Assets/Plugins/x86_64`. `install-libs` publishes the loadable copies to `Assets/Plugins/x86_64`.
 
-Outputs land in `dist~/lib` and `dist~/bin`; `install-libs` publishes the loadable plugins.
+Outputs land in `dist~/lib`; `install-libs` publishes the loadable plugins.
 `bakery_wine_host.exe` is shipped **prebuilt** in `dist~/bin`; rebuild it locally with `wine/build-host.sh`.
 `wine/build-host.sh` auto-fetches a Linux-hosted `llvm-mingw` toolchain if no cross compiler is found.
-Without `BAKERY_FRENDER_WINE=ON`, `libfrender.so` is a failing stub.
 
 The glue launches tools through `BAKERY_RUNNER` (default `wine`; also `proton run`, `umu-run`, or
 `none` for native tools), resolving logical names against `BAKERY_TOOLS_DIR` with `BAKERY_TOOL_EXT`.

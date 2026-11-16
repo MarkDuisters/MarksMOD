@@ -124,7 +124,6 @@ public static class BakeryLinuxPatchRules
                 text.IndexOf("EditorGUILayout.LabelField(\"Atlas packer\"", StringComparison.Ordinal) < 0 &&
                 text.IndexOf("lmname + \"_final_Dir\" + (compressedOutput ? \".lz4\" : \".dds\") + \"\\\"\"", StringComparison.Ordinal) >= 0 &&
                 text.IndexOf("if (ftBuildGraphics.atlasPacker == ftGlobalStorage.AtlasPacker.xatlas) ftBuildGraphics.atlasPacker = ftGlobalStorage.AtlasPacker.Default;", StringComparison.Ordinal) < 0;
-            case "ftModelPostProcessor.cs": return text.IndexOf("BAKERY_TEST_DISABLE_IMPORT_UNWRAP", StringComparison.Ordinal) >= 0;
             case "ftClearCache.cs": return text.IndexOf("Path.GetTempPath()", StringComparison.Ordinal) >= 0 &&
                 text.IndexOf("GetEnvironmentVariable(\"TEMP\"", StringComparison.Ordinal) < 0;
             default: return false;
@@ -141,7 +140,6 @@ public static class BakeryLinuxPatchRules
             case "ftUpdater.cs": PatchUpdater(file); break;
             case "ftBuildGraphics.cs": PatchBuildGraphics(file); break;
             case "ftRenderLightmap.cs": PatchRenderLightmap(file); break;
-            case "ftModelPostProcessor.cs": PatchModelPostProcessor(file); break;
             case "ftClearCache.cs": PatchClearCache(file); break;
             default: file.Errors.Add("Unknown file: " + fileName); break;
         }
@@ -230,21 +228,6 @@ public static class BakeryLinuxPatchRules
             yield break;
         }
         var positions = probes.positions;");
-    }
-
-    static void PatchModelPostProcessor(BakeryLinuxPatchFile f)
-    {
-        f.InsertAfter("    static Dictionary<string, ftSavedPadding2> assetSavedPaddingAdjustment = new Dictionary<string, ftSavedPadding2>();",
-            "    static bool TestDisableAutoUnwrap" + f.NewLine +
-            "    {" + f.NewLine +
-            "        get { return !string.IsNullOrEmpty(System.Environment.GetEnvironmentVariable(\"BAKERY_TEST_DISABLE_IMPORT_UNWRAP\")); }" + f.NewLine +
-            "    }");
-
-        f.InsertAfter("        Init();",
-            "        if (TestDisableAutoUnwrap) return;");
-
-        f.InsertAfter("    void OnPostprocessModel(GameObject g)" + f.NewLine + "    {",
-            "        if (TestDisableAutoUnwrap) return;");
     }
 
     static void PatchClearCache(BakeryLinuxPatchFile f)
