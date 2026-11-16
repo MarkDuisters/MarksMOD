@@ -58,28 +58,87 @@ or `${BAKERY_FRENDER_DIR}/scripts\\xatlas\\xatlasLib.dll`.
 - Wine, winetricks and DXVK are installed by the user through the distribution package manager.
 - Bakery's Windows payload is not redistributed and must come from the user's Bakery installation.
 
-## Build
+## Build outputs and runtime locations
+
+This folder contains build inputs, runtime helper scripts and one prebuilt runtime binary.
+
+| Path | Used for | Result or runtime location |
+|---|---|---|
+| `src/glue/bakery_glue.cpp` | Linux CPU/OS shim | `Assets/Plugins/x86_64/libbakery_glue.so` and its aliases |
+| `src/glue/xatlas_wine_proxy.cpp` | Linux xatlas proxy | `Assets/Plugins/x86_64/libxatlasLib_wine.so` and the active `libxatlasLib.so` |
+| `src/frender/frender_proxy.cpp` | Linux frender proxy | `Assets/Plugins/x86_64/libfrender.so` |
+| `src/wine/bakery_wine_host.cpp` | Wine worker executable | `Native/dist~/bin/bakery_wine_host.exe` |
+| `build/CMakeLists.txt` | CMake build definition | `Native/dist~/lib/` |
+| `build/install-libs.sh` | Copies libraries and aliases | `Assets/Plugins/x86_64/` |
+| `wine/build-host.sh` | Rebuilds the Wine host with MinGW | `Native/dist~/bin/bakery_wine_host.exe` |
+| `wine/bootstrap.sh` | Creates the Wine prefix during `1. Run Setup` | Run in place from `Native/wine/` |
+| `wine/probe.sh` | Runs `Test Bridge` and environment checks | Run in place from `Native/wine/` |
+| `wine/host_ping.py` | Sends the host ping used by `probe.sh` | Run in place from `Native/wine/` |
+| `dist~/bin/bakery_wine_host.exe` | Prebuilt host required at runtime | Keep in `Native/dist~/bin/` |
+| `dist~/lib/` | Temporary CMake output, not shipped | Copy to `Assets/Plugins/x86_64/` with `install-libs` |
+
+The `.so` files are not loaded from `Native`. They must end up in the Unity project's
+`Assets/Plugins/x86_64/` folder because Mono resolves the `DllImport` names there. The host
+executable and the Wine scripts stay under `Native`.
+
+With Bakery at its default path, `Native` is `Assets/Editor/x64/Bakery/MarksMOD/Native`. If Bakery
+is installed elsewhere, the same tree lives in that Bakery's `MarksMOD/Native` folder, while the
+plugin destination remains the project's `Assets/Plugins/x86_64/`.
+
+Release packages already contain the built libraries in `Assets/Plugins/x86_64/` and the prebuilt
+host in `Native/dist~/bin/`. Rebuild them only if you change the native source or want to build
+everything yourself.
+
+## Build from source
+
+### Linux libraries
 
 ```
 cmake -S build -B build/out -DCMAKE_BUILD_TYPE=Release
 cmake --build build/out -j
-  cmake --build build/out --target install-libs   # copies the xatlas proxy + aliases to Assets/Plugins/x86_64
-
-wine/bootstrap.sh       # creates/configures the user's Wine prefix
-wine/probe.sh           # validates D3D11/DXVK + CUDA/OptiX bridge
+cmake --build build/out --target install-libs
 ```
+
+The last command copies the built libraries into `Assets/Plugins/x86_64/`. If you do not use
+`install-libs.sh`, place the built files in the project like this:
+
+```
+<UnityProject>/Assets/Plugins/x86_64/
+  libbakery_glue.so
+  libfrender.so
+  libxatlasLib.so          copy of libxatlasLib_wine.so
+  libxatlasLib_wine.so
+  libsimpleProgressBar.so  copy of libbakery_glue.so
+  libhalffloat2vb.so       copy of libbakery_glue.so
+  libuvrepack.so           copy of libbakery_glue.so
+  libuser32.so             copy of libbakery_glue.so
+```
+
+### Wine host
+
+```
+wine/build-host.sh
+```
+
+This writes `bakery_wine_host.exe` directly to `Native/dist~/bin/`. Keep it there. This path is
+resolved by the add-on, and `dist~` is ignored by Unity so the executable is not imported as a
+plugin. The prebuilt host is included in the release; rebuild it only if you change its source.
+
+### Runtime scripts
+
+`bootstrap.sh`, `probe.sh` and `host_ping.py` are runtime helpers, not build outputs. Keep them
+in `Native/wine/`; the wizard and `Test Bridge` invoke them from there and the scripts resolve
+their own paths relative to that folder.
 
 Folders ending in `~` are ignored by Unity. That is why build outputs live in `dist~/`: otherwise
 Unity would import them as native plugins and report duplicate names alongside
 `Assets/Plugins/x86_64`. `install-libs` publishes the loadable copies to `Assets/Plugins/x86_64`.
 
-Outputs land in `dist~/lib`; `install-libs` publishes the loadable plugins.
-`bakery_wine_host.exe` is shipped **prebuilt** in `dist~/bin`; rebuild it locally with `wine/build-host.sh`.
-`wine/build-host.sh` auto-fetches a Linux-hosted `llvm-mingw` toolchain if no cross compiler is found.
-
 The glue launches tools through `BAKERY_RUNNER` (default `wine`; also `proton run`, `umu-run`, or
 `none` for native tools), resolving logical names against `BAKERY_TOOLS_DIR` with `BAKERY_TOOL_EXT`.
 See `wine/README.md`.
+
+After replacing a `.so` file, restart Unity before baking because native plugins may already be loaded.
 
 On first editor load, `BakeryLinuxSetup.cs` offers a **Setup Wine** dialog that runs
 `wine/bootstrap.sh` with a progress bar, then opens the status wizard. The only menu entry is
