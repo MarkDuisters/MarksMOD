@@ -14,7 +14,6 @@ MarksMOD/Native/
   src/wine/      bakery_wine_host        Wine worker: loads real frender.dll, serves IPC
   wine/          bootstrap/probe/build scripts for the Wine bridge
   build/         CMake build
-  third_party/   dependency notes
   dist~/lib/      built shared libraries (Unity-ignored; install-libs copies them)
   dist~/bin/      prebuilt Wine host (Unity-ignored)
 ```
@@ -49,6 +48,15 @@ All alias libraries are copies of `libbakery_glue.so` except `libfrender.so` and
 `libxatlasLib.so` is the Wine proxy. It never casts its logical 64-bit atlas handle to a Linux
 pointer: all atlas state is owned by `bakery_wine_host.exe`, which loads `BAKERY_XATLAS_DLL`
 or `${BAKERY_FRENDER_DIR}/scripts\\xatlas\\xatlasLib.dll`.
+
+## Dependencies
+
+- `libbakery_glue.so` links the system `lz4` library, so `liblz4.so.1` must be available at runtime.
+- `bakery_wine_host.exe` needs MinGW-w64 or llvm-mingw only when rebuilding. `wine/build-host.sh`
+  uses a system compiler or fetches llvm-mingw automatically.
+- The Wine prefix needs `nvcuda.dll` and `nvoptix.dll` from nvidia-libs. `wine/bootstrap.sh` fetches them.
+- Wine, winetricks and DXVK are installed by the user through the distribution package manager.
+- Bakery's Windows payload is not redistributed and must come from the user's Bakery installation.
 
 ## Build
 
