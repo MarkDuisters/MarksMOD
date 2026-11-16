@@ -91,9 +91,13 @@ With Bakery at its default path, this folder is
 installed elsewhere, place the `MarksMOD` folder next to that Bakery's `scripts` folder. In both
 cases, the built `.so` files belong in the merged project's `Assets/Plugins/x86_64/` folder.
 
-Release packages already contain the built libraries in `MarksMOD/Assets/Plugins/x86_64/` and the
-prebuilt host in `MarksMOD/Assets/Editor/x64/Bakery/MarksMOD/Native/dist~/bin/`. Rebuild them only
-if you change the native source or want to build everything yourself.
+### Release binaries are already included
+
+> **You do not need to rebuild the native components.**
+>
+> Release packages already contain the built libraries in `MarksMOD/Assets/Plugins/x86_64/` and
+> the prebuilt host in `MarksMOD/Assets/Editor/x64/Bakery/MarksMOD/Native/dist~/bin/`. Rebuild only
+> if you change the native source or want to build everything yourself.
 
 ## Build from source
 
