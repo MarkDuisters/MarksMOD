@@ -22,6 +22,12 @@ public class BakeryLinuxPatchFile
 
     public bool Replace(string oldValue, string newValue, bool required = true)
     {
+        if (string.IsNullOrEmpty(oldValue))
+        {
+            if (required) Errors.Add("Empty anchor");
+            return false;
+        }
+
         int count = Count(Text, oldValue);
         if (count == 0)
         {
@@ -64,6 +70,12 @@ public class BakeryLinuxPatchFile
 
     public bool InsertAfter(string anchor, string block)
     {
+        if (string.IsNullOrEmpty(anchor))
+        {
+            Errors.Add("Empty anchor");
+            return false;
+        }
+
         int index = Text.IndexOf(anchor, StringComparison.Ordinal);
         if (index < 0)
         {
@@ -82,6 +94,8 @@ public class BakeryLinuxPatchFile
 
     static int Count(string text, string value)
     {
+        if (string.IsNullOrEmpty(value)) return 0;
+
         int count = 0;
         int index = 0;
         while ((index = text.IndexOf(value, index, StringComparison.Ordinal)) >= 0)

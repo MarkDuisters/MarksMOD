@@ -73,10 +73,10 @@ public static class BakeryLinuxBootstrap
 
         if (!BakeryLinuxPatcher.IsPatched)
         {
-            Debug.LogWarning("[Bakery] MarksMOD patches are not applied. Open Bakery/MarksMOD/Setup Wizard and click Patch Bakery.");
+            Debug.LogWarning("[Bakery] MarksMOD patches are not applied. Open Bakery/MarksMOD/Setup Wizard and click PATCH!");
         }
 
-        BakeryLinuxSetup.ScheduleStartupCheck();
+        BakeryLinuxSetup.HintSetupOnce();
         BakeryLinuxHost.ScheduleStart();
         EditorApplication.quitting -= BakeryWineHost.Stop;
         EditorApplication.quitting += BakeryWineHost.Stop;

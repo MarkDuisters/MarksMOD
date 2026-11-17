@@ -74,7 +74,7 @@ This folder contains build inputs, runtime helper scripts and one prebuilt runti
 | `build/CMakeLists.txt` | CMake build definition | `MarksMOD/Assets/Editor/x64/Bakery/MarksMOD/Native/dist~/lib/` |
 | `build/install-libs.sh` | Copies libraries and aliases | `MarksMOD/Assets/Plugins/x86_64/` |
 | `wine/build-host.sh` | Rebuilds the Wine host with MinGW | `MarksMOD/Assets/Editor/x64/Bakery/MarksMOD/Native/dist~/bin/bakery_wine_host.exe` |
-| `wine/bootstrap.sh` | Creates the Wine prefix during `1. Run Setup` | Run in place from `MarksMOD/Assets/Editor/x64/Bakery/MarksMOD/Native/wine/` |
+| `wine/bootstrap.sh` | Creates the Wine prefix during `PATCH!` when setup is needed | Run in place from `MarksMOD/Assets/Editor/x64/Bakery/MarksMOD/Native/wine/` |
 | `wine/probe.sh` | Runs `Test Bridge` and environment checks | Run in place from `MarksMOD/Assets/Editor/x64/Bakery/MarksMOD/Native/wine/` |
 | `wine/host_ping.py` | Sends the host ping used by `probe.sh` | Run in place from `MarksMOD/Assets/Editor/x64/Bakery/MarksMOD/Native/wine/` |
 | `dist~/bin/bakery_wine_host.exe` | Prebuilt host required at runtime | Keep in `MarksMOD/Assets/Editor/x64/Bakery/MarksMOD/Native/dist~/bin/` |
@@ -152,12 +152,11 @@ See `wine/README.md`.
 
 After replacing a `.so` file, restart Unity before baking because native plugins may already be loaded.
 
-On first editor load, `BakeryLinuxSetup.cs` offers a **Setup Wine** dialog that runs
-`wine/bootstrap.sh` with a progress bar, then opens the status wizard. The only menu entry is
-`Bakery > MarksMOD > Setup Wizard` (per-component OK/WARN/FAIL). Use **1. Run Setup**,
-**2. Patch Bakery**, then **3. Activate xatlas** in the wizard; the wizard also has a
-**Show setup at start** toggle. Setup
-completion is the `$BAKERY_WINEPREFIX/.bakery-setup-ok` sentinel.
+Start setup manually from `Bakery > MarksMOD > Setup Wizard` (per-component OK/WARN/FAIL); there is
+no automatic startup dialog. Use **PATCH!** (requirements check, setup when needed, then patch),
+then **Activate xatlas** in the wizard. Setup completion is the
+`$BAKERY_WINEPREFIX/.bakery-setup-ok` sentinel. If setup is incomplete, the editor logs a one-time
+warning pointing at the wizard.
 
 ## xatlas
 

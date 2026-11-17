@@ -3,6 +3,7 @@ using System;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
+using System.Text;
 using UnityEngine;
 using UnityEngine.Rendering;
 
@@ -80,8 +81,9 @@ public static class BakeryLinuxDiagnostics
         bool hasBakeryXatlas = File.Exists(bakeryXatlas);
         Add(list, "Bakery xatlas DLL", hasBakeryXatlas ? BakeryCheckStatus.Ok : BakeryCheckStatus.Fail,
             hasBakeryXatlas ? bakeryXatlas + " (" + new FileInfo(bakeryXatlas).Length + " bytes)" : bakeryXatlas);
-        Add(list, "Wine xatlas host", BakeryWineHost.Ping() ? BakeryCheckStatus.Ok : BakeryCheckStatus.Warn,
-            BakeryWineHost.Ping() ? "ready" : "starts on demand");
+        bool hostReady = BakeryWineHost.Ping();
+        Add(list, "Wine xatlas host", hostReady ? BakeryCheckStatus.Ok : BakeryCheckStatus.Warn,
+            hostReady ? "ready" : "starts on demand");
         string glue = Path.Combine(libs, "libbakery_glue.so");
         Add(list, "libbakery_glue.so", File.Exists(glue) ? BakeryCheckStatus.Ok : BakeryCheckStatus.Warn, libs);
         Add(list, "libfrender.so", File.Exists(Path.Combine(libs, "libfrender.so")) ? BakeryCheckStatus.Ok : BakeryCheckStatus.Warn, libs);
@@ -116,7 +118,7 @@ public static class BakeryLinuxDiagnostics
 
         bool patched = BakeryLinuxPatcher.IsPatched;
         Add(list, "Bakery patches", patched ? BakeryCheckStatus.Ok : BakeryCheckStatus.Fail,
-            patched ? "applied" : "click Patch Bakery in the wizard");
+            patched ? "applied" : "click PATCH! in the wizard");
 
         Add(list, "Unity graphics API", SystemInfo.graphicsDeviceType == GraphicsDeviceType.Direct3D11 ? BakeryCheckStatus.Warn : BakeryCheckStatus.Ok,
             SystemInfo.graphicsDeviceType.ToString());
@@ -148,7 +150,7 @@ public static class BakeryLinuxDiagnostics
         Add(list, file, ok ? BakeryCheckStatus.Ok : failStatus, ok ? dir : "not found in " + dir);
     }
 
-    static string FindInPath(string exe)
+    internal static string FindInPath(string exe)
     {
         string path = Environment.GetEnvironmentVariable("PATH");
         if (string.IsNullOrEmpty(path)) return null;
@@ -161,7 +163,7 @@ public static class BakeryLinuxDiagnostics
         return null;
     }
 
-    static string Capture(string file, string args, int timeoutMs)
+    internal static string Capture(string file, string args, int timeoutMs, bool includeError = false)
     {
         try
         {
@@ -175,17 +177,45 @@ public static class BakeryLinuxDiagnostics
                 CreateNoWindow = true
             };
 
-            using (var p = Process.Start(psi))
+            var output = new StringBuilder();
+            var error = new StringBuilder();
+
+            using (var p = new Process())
             {
-                if (p == null) return null;
-                string output = p.StandardOutput.ReadToEnd();
-                string error = p.StandardError.ReadToEnd();
+                p.StartInfo = psi;
+                p.OutputDataReceived += (sender, e) =>
+                {
+                    if (e.Data == null) return;
+                    lock (output) output.AppendLine(e.Data);
+                };
+                p.ErrorDataReceived += (sender, e) =>
+                {
+                    if (e.Data == null) return;
+                    lock (error) error.AppendLine(e.Data);
+                };
+
+                if (!p.Start()) return null;
+                p.BeginOutputReadLine();
+                p.BeginErrorReadLine();
+
                 if (!p.WaitForExit(timeoutMs))
                 {
                     try { p.Kill(); } catch { }
+                    try { p.WaitForExit(1000); } catch { }
                     return null;
                 }
-                return string.IsNullOrEmpty(output) ? error : output;
+
+                p.WaitForExit();
+
+                string stdout;
+                string stderr;
+                lock (output) stdout = output.ToString();
+                lock (error) stderr = error.ToString();
+
+                if (!includeError) return string.IsNullOrEmpty(stdout) ? stderr : stdout;
+                if (string.IsNullOrEmpty(stdout)) return stderr;
+                if (string.IsNullOrEmpty(stderr)) return stdout;
+                return stdout + "\n" + stderr;
             }
         }
         catch

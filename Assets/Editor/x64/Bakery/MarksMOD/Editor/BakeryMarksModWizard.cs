@@ -1,12 +1,18 @@
 #if UNITY_EDITOR
 using System.Collections.Generic;
 using System.IO;
+using System.Text;
 using UnityEditor;
 using UnityEngine;
 
 public class BakeryMarksModWizard : EditorWindow
 {
     List<BakeryCheckResult> results = new List<BakeryCheckResult>();
+    List<BakeryCheckResult> requirementResults;
+    string requirementSummary;
+    MessageType requirementSummaryType;
+    string xatlasStatus = "";
+    bool xatlasActive;
     Vector2 scroll;
     Vector2 probeScroll;
 
@@ -49,34 +55,110 @@ public class BakeryMarksModWizard : EditorWindow
     void Recheck()
     {
         results = BakeryLinuxDiagnostics.Run();
+        RefreshXatlasState();
+    }
+
+    void RefreshXatlasState()
+    {
+        xatlasActive = BakeryXatlasBackendService.IsActive;
+        xatlasStatus = BakeryXatlasBackendService.GetStatus();
+    }
+
+    int RunRequirements()
+    {
+        requirementResults = BakeryLinuxRequirements.Run();
+        scroll = Vector2.zero;
+
+        int ok = 0;
+        int warn = 0;
+        int fail = 0;
+        var text = new StringBuilder();
+        text.AppendLine("[Bakery MarksMOD] System requirements:");
+        foreach (var result in requirementResults)
+        {
+            if (result.Status == BakeryCheckStatus.Ok) ok++;
+            else if (result.Status == BakeryCheckStatus.Warn) warn++;
+            else fail++;
+
+            text.AppendLine(result.Status.ToString().ToUpperInvariant() + "  " + result.Name + ": " + result.Detail);
+        }
+
+        requirementSummary = "Requirements: " + ok + " OK, " + warn + " warnings, " + fail + " failures.";
+        requirementSummaryType = fail > 0
+            ? MessageType.Error
+            : warn > 0 ? MessageType.Warning : MessageType.Info;
+        Debug.Log(text.ToString());
+        return fail;
+    }
+
+    void PatchAll()
+    {
+        if (BakeryLinuxSetup.IsRunning)
+        {
+            EditorUtility.DisplayDialog("Bakery", "Wine setup is already running.", "OK");
+            return;
+        }
+
+        int failures = RunRequirements();
+        if (failures > 0)
+        {
+            EditorUtility.DisplayDialog(
+                "Bakery / MarksMOD",
+                "Requirements check found " + failures + " failure(s).\n\n" +
+                "Fix the items marked FAIL in the System requirements list, then press PATCH! again.",
+                "OK");
+            return;
+        }
+
+        if (!BakeryLinuxSetup.PrefixLooksReady)
+        {
+            BakeryLinuxSetup.RunSetup(PatchBakery);
+            return;
+        }
+
+        PatchBakery();
     }
 
     void OnGUI()
     {
         EditorGUILayout.LabelField("Bakery Linux setup wizard", EditorStyles.boldLabel);
         EditorGUILayout.HelpBox(
-            "Follow the numbered steps: 1) Run Setup, 2) Patch Bakery, 3) Activate xatlas. " +
-            "Re-check to verify the result.",
+            "PATCH! checks the system requirements, runs Wine setup when needed, then patches Bakery. " +
+            "Use Activate xatlas afterwards and restart Unity. Re-check verifies the result.",
             MessageType.None);
 
         EditorGUILayout.BeginHorizontal();
-        if (GUILayout.Button("1. Run Setup")) BakeryLinuxSetup.RunSetup();
-        if (GUILayout.Button("2. Patch Bakery")) PatchBakery();
-        if (GUILayout.Button("3. Activate xatlas")) ActivateXatlas();
+        using (new EditorGUI.DisabledScope(BakeryLinuxSetup.IsRunning))
+        {
+            if (GUILayout.Button("PATCH!")) PatchAll();
+            if (GUILayout.Button("Activate xatlas")) ActivateXatlas();
+        }
         EditorGUILayout.EndHorizontal();
         EditorGUILayout.HelpBox(
             "xatlas uses the xatlasLib.dll shipped with your Bakery installation " +
-            "its scripts/xatlas folder through the Wine host.", MessageType.None);
-        EditorGUILayout.LabelField(BakeryXatlasBackendService.GetStatus(), EditorStyles.miniLabel);
-        if (!BakeryXatlasBackendService.IsActive)
+            "in its scripts/xatlas folder through the Wine host.", MessageType.None);
+        EditorGUILayout.LabelField(xatlasStatus, EditorStyles.miniLabel);
+        if (!xatlasActive)
         {
             EditorGUILayout.HelpBox(
-                "Bakery's xatlas proxy is not active. Use step 3, then restart Unity.",
+                "Bakery's xatlas proxy is not active. Use Activate xatlas, then restart Unity.",
                 MessageType.Warning);
         }
 
         EditorGUILayout.Space();
         scroll = EditorGUILayout.BeginScrollView(scroll);
+        if (requirementResults != null)
+        {
+            EditorGUILayout.LabelField("System requirements", EditorStyles.boldLabel);
+            if (!string.IsNullOrEmpty(requirementSummary))
+            {
+                EditorGUILayout.HelpBox(requirementSummary, requirementSummaryType);
+            }
+            foreach (var result in requirementResults) DrawRow(result);
+            EditorGUILayout.Space();
+        }
+
+        EditorGUILayout.LabelField("Wine environment", EditorStyles.boldLabel);
         if (results != null)
         {
             foreach (var result in results) DrawRow(result);
@@ -90,8 +172,6 @@ public class BakeryMarksModWizard : EditorWindow
         if (GUILayout.Button("Open Log")) OpenLog();
         if (GUILayout.Button("Restore Bakery")) RestoreBakery();
         EditorGUILayout.EndHorizontal();
-
-        BakeryLinuxSetup.ShowSetupAtStart = EditorGUILayout.ToggleLeft("Show setup at start", BakeryLinuxSetup.ShowSetupAtStart);
 
         if (BakeryLinuxProbeRunner.Running)
         {
@@ -200,7 +280,11 @@ public class BakeryMarksModWizard : EditorWindow
         string path = BakeryLinuxSetup.LogPath;
         if (!File.Exists(path))
         {
-            EditorUtility.DisplayDialog("Bakery", "No setup log yet:\n" + path, "OK");
+            EditorUtility.DisplayDialog(
+                "Bakery",
+                "No in-editor setup log yet:\n" + path +
+                "\n\nThe log is written after Wine setup finishes. A manual bootstrap.sh run writes to the terminal instead.",
+                "OK");
             return;
         }
         EditorUtility.RevealInFinder(path);

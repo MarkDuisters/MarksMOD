@@ -52,14 +52,12 @@ The prefix defaults to `${XDG_DATA_HOME:-$HOME/.local/share}/bakery/wineprefix`.
 
 ### In-editor setup
 
-`BakeryLinuxSetup.cs` + `BakeryMarksModWizard.cs` add the first-run flow and a status wizard:
+`BakeryLinuxSetup.cs` + `BakeryMarksModWizard.cs` provide the setup commands and a status wizard:
 
-- On load, if Linux setup is incomplete and the user hasn't dismissed it, a dialog offers
-  **Setup Wine** / Open Wizard / Don't ask again. Either choice opens the wizard.
-- `Bakery > MarksMOD > Setup Wizard` opens the component checker.
-- **Run Setup** in the wizard runs `bootstrap.sh` with a progress bar and cancel.
-- **Patch Bakery** in the wizard patches the Bakery scripts after setup.
-- **Show setup at start** controls the first-run prompt.
+- Open `Bakery > MarksMOD > Setup Wizard` manually; there is no automatic startup dialog.
+- **PATCH!** runs the requirements check, runs `bootstrap.sh` with a progress bar and cancel when
+  the Wine prefix is missing or incomplete, then patches the Bakery scripts.
+- **Activate xatlas** installs Bakery's xatlas proxy.
 - **Restore Bakery** restores the patched files and removes the MarksMOD folder from Bakery.
 
 The wizard (`BakeryLinuxDiagnostics`) reports OK/WARN/FAIL per component: Linux editor, runner
@@ -69,9 +67,9 @@ The wizard (`BakeryLinuxDiagnostics`) reports OK/WARN/FAIL per component: Linux 
 denoisers, combine tools), and the Unity graphics API.
 
 Setup is considered complete when `$BAKERY_WINEPREFIX/.bakery-setup-ok` exists (written by
-`bootstrap.sh` on success). "Show setup at start" is stored in `EditorPrefs`; disabling it only
-suppresses the startup prompt and does not mark setup complete, so diagnostics still report missing
-setup until the environment is actually installed.
+`bootstrap.sh` on success). If setup is incomplete, the editor logs a one-time warning pointing at
+the wizard; the wizard's diagnostics continue to report the missing components until the environment
+is installed.
 
 ## Bridge test
 

@@ -9,24 +9,38 @@ using UnityEngine;
 public static class BakeryLinuxSetup
 {
     const string SentinelName = ".bakery-setup-ok";
-    const string PrefShowAtStart = "Bakery.Linux.ShowSetupAtStart";
+    const string SessionHint = "Bakery.Linux.SetupHinted";
     const string LogName = "BakeryLinuxSetup.log";
-
-    public static bool ShowSetupAtStart
-    {
-        get { return EditorPrefs.GetBool(PrefShowAtStart, true); }
-        set { EditorPrefs.SetBool(PrefShowAtStart, value); }
-    }
 
     static Process runningProcess;
     static readonly StringBuilder log = new StringBuilder();
     static bool running;
     static bool cancelled;
     static double startedAt;
+    static Action completionCallback;
+
+    public static bool IsRunning
+    {
+        get { return running; }
+    }
 
     public static bool IsLinuxEditor
     {
         get { return Application.platform == RuntimePlatform.LinuxEditor; }
+    }
+
+    public static string WineRootPath
+    {
+        get
+        {
+            var wineRoot = Environment.GetEnvironmentVariable("BAKERY_WINE_ROOT");
+            if (!string.IsNullOrEmpty(wineRoot)) return wineRoot;
+
+            var xdg = Environment.GetEnvironmentVariable("XDG_DATA_HOME");
+            var home = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
+            var root = string.IsNullOrEmpty(xdg) ? Path.Combine(home, ".local", "share") : xdg;
+            return Path.Combine(root, "bakery");
+        }
     }
 
     public static string PrefixPath
@@ -36,13 +50,7 @@ public static class BakeryLinuxSetup
             var env = Environment.GetEnvironmentVariable("BAKERY_WINEPREFIX");
             if (!string.IsNullOrEmpty(env)) return env;
 
-            var wineRoot = Environment.GetEnvironmentVariable("BAKERY_WINE_ROOT");
-            if (!string.IsNullOrEmpty(wineRoot)) return Path.Combine(wineRoot, "wineprefix");
-
-            var xdg = Environment.GetEnvironmentVariable("XDG_DATA_HOME");
-            var home = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
-            var root = string.IsNullOrEmpty(xdg) ? Path.Combine(home, ".local", "share") : xdg;
-            return Path.Combine(root, "bakery", "wineprefix");
+            return Path.Combine(WineRootPath, "wineprefix");
         }
     }
 
@@ -56,46 +64,42 @@ public static class BakeryLinuxSetup
         get { return File.Exists(Path.Combine(PrefixPath, SentinelName)); }
     }
 
-    public static void ScheduleStartupCheck()
+    public static bool PrefixLooksReady
     {
-        if (!IsLinuxEditor) return;
-        EditorApplication.delayCall += StartupCheck;
-    }
-
-    static void StartupCheck()
-    {
-        if (Application.isBatchMode) return;
-        if (running || SetupComplete) return;
-        if (!ShowSetupAtStart) return;
-
-        int choice = EditorUtility.DisplayDialogComplex(
-            "Bakery on Linux",
-            "Bakery needs a Wine environment to run its GPU engine on Linux.\n\n" +
-            "Setup creates a 64-bit prefix, installs the Visual C++ runtime, DXVK and maps the " +
-            "NVIDIA driver. It can take several minutes.",
-            "Setup Wine",
-            "Open Wizard",
-            "Don't ask again");
-
-        if (choice == 0)
+        get
         {
-            RunSetup();
-            BakeryMarksModWizard.ShowWindow();
-        }
-        else if (choice == 1)
-        {
-            BakeryMarksModWizard.ShowWindow();
-        }
-        else
-        {
-            ShowSetupAtStart = false;
+            if (!SetupComplete) return false;
+
+            string sys32 = Path.Combine(PrefixPath, "drive_c", "windows", "system32");
+            if (!File.Exists(Path.Combine(sys32, "msvcp140.dll"))) return false;
+            if (!File.Exists(Path.Combine(sys32, "vcruntime140.dll"))) return false;
+            if (!File.Exists(Path.Combine(sys32, "d3d11.dll"))) return false;
+
+            if (Environment.GetEnvironmentVariable("BAKERY_NO_NVIDIA_LIBS") != "1")
+            {
+                if (!File.Exists(Path.Combine(sys32, "nvcuda.dll"))) return false;
+                if (!File.Exists(Path.Combine(sys32, "nvoptix.dll"))) return false;
+            }
+
+            return true;
         }
     }
 
-    public static void RunSetup()
+    public static void HintSetupOnce()
+    {
+        if (!IsLinuxEditor || PrefixLooksReady) return;
+        if (SessionState.GetBool(SessionHint, false)) return;
+
+        SessionState.SetBool(SessionHint, true);
+        UnityEngine.Debug.LogWarning(
+            "[Bakery] Wine setup is not complete. Open Bakery > MarksMOD > Setup Wizard and click PATCH!");
+    }
+
+    public static void RunSetup(Action onComplete = null)
     {
         if (!IsLinuxEditor)
         {
+            completionCallback = null;
             EditorUtility.DisplayDialog("Bakery", "Wine setup is only used on Linux.", "OK");
             return;
         }
@@ -108,10 +112,12 @@ public static class BakeryLinuxSetup
         var script = Path.Combine(ScriptDirectory, "bootstrap.sh");
         if (!File.Exists(script))
         {
+            completionCallback = null;
             EditorUtility.DisplayDialog("Bakery", "Bootstrap script not found:\n" + script, "OK");
             return;
         }
 
+        completionCallback = onComplete;
         log.Length = 0;
         cancelled = false;
         startedAt = EditorApplication.timeSinceStartup;
@@ -140,6 +146,7 @@ public static class BakeryLinuxSetup
         }
         catch (Exception e)
         {
+            completionCallback = null;
             EditorUtility.DisplayDialog("Bakery", "Could not start setup:\n" + e.Message, "OK");
             return;
         }
@@ -202,18 +209,37 @@ public static class BakeryLinuxSetup
 
         if (cancelled)
         {
+            completionCallback = null;
             UnityEngine.Debug.LogWarning("[Bakery] Wine setup cancelled.");
             return;
         }
 
-        BakeryMarksModWizard.RefreshIfOpen();
+        Action callback = completionCallback;
+        completionCallback = null;
 
         if (exitCode == 0 && SetupComplete)
         {
-            EditorUtility.DisplayDialog("Bakery", "Wine setup finished.\n\nPrefix:\n" + PrefixPath, "OK");
+            UnityEngine.Debug.Log("[Bakery] Wine setup finished: " + PrefixPath);
+            if (callback != null)
+            {
+                try
+                {
+                    callback();
+                }
+                catch (Exception e)
+                {
+                    UnityEngine.Debug.LogError("[Bakery] Post-setup action failed: " + e);
+                }
+            }
+            else
+            {
+                BakeryMarksModWizard.RefreshIfOpen();
+                EditorUtility.DisplayDialog("Bakery", "Wine setup finished.\n\nPrefix:\n" + PrefixPath, "OK");
+            }
         }
         else
         {
+            BakeryMarksModWizard.RefreshIfOpen();
             UnityEngine.Debug.LogError("[Bakery] Wine setup failed (exit " + exitCode + ").\n" + Tail(text, 40));
             EditorUtility.DisplayDialog(
                 "Bakery",

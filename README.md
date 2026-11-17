@@ -9,16 +9,18 @@ MarksMOD is a Linux/Wine compatibility layer for an existing Bakery installation
 - Unity Editor on Linux (tested with Unity 6000.3.22f1 and URP 17.3).
 - NVIDIA GPU and a driver that supports CUDA and OptiX.
 - Wine (tested with wine-11.19) and winetricks, installed through your distribution's package manager.
-- Bakery installed in your Unity project before merging MarksMOD (tested with Bakery v1.985). See the [MarksMOD README](https://github.com/MarkDuisters/MarksMOD?tab=readme-ov-file) for details.
+- glibc, libstdc++ and liblz4 compatible with the shipped plugin shims. `PATCH!` reports the exact glibc requirement of the binaries.
+- The `main` and `legacy-glibc` branches contain identical code; only the prebuilt Linux shims differ. `main` targets newer glibc, `legacy-glibc` targets an older baseline. Check `ldd --version` or the glibc row in `PATCH!` and use the matching branch.
+- `/bin/bash`, `python3`, `flock`, `curl` or `wget`, and `tar` for the setup/probe scripts.
+- Bakery v1.985 installed in your Unity project before merging MarksMOD. The patcher is source-anchored to this version; other Bakery versions report missing files or patch anchors. See the [MarksMOD README](https://github.com/MarkDuisters/MarksMOD?tab=readme-ov-file) for details.
 
 ## Install
 
 1. Merge this repository's `Assets/` folder into your Unity project's `Assets/` folder. This adds the Linux plugin shims under `Assets/Plugins/x86_64` and places the add-on at `Assets/Editor/x64/Bakery/MarksMOD` when Bakery uses its default path. If Bakery is installed elsewhere, place the mentioned folders relative to the custom Bakery location instead.
 2. Open `Bakery > MarksMOD > Setup Wizard`.
-3. Click `1. Run Setup` once to prepare the Wine prefix, the VC++ runtime, DXVK and the NVIDIA libraries.
-4. Click `2. Patch Bakery`. The patcher edits your installed Bakery files in place and stores pristine backups under `Assets/Editor/x64/Bakery/MarksMOD/Native/backup~`.
-5. Click `3. Activate xatlas` to install Bakery's xatlas proxy, then restart Unity.
-6. Use `Re-check` and `Test Bridge` to validate the setup.
+3. Click `PATCH!`. It checks the system requirements, runs Wine setup when the prefix is missing or incomplete, then patches Bakery. The patcher edits your installed Bakery files in place and stores pristine backups under `Assets/Editor/x64/Bakery/MarksMOD/Native/backup~`.
+4. Click `Activate xatlas` to install Bakery's xatlas proxy, then restart Unity.
+5. Use `Re-check` and `Test Bridge` to validate the setup.
 
 `Restore Bakery` restores the original Bakery files from the stored backups and removes the `MarksMOD` folder from Bakery. The Linux plugin shims in `Assets/Plugins` are kept.
 
@@ -39,7 +41,7 @@ Validation covered:
 
 ## xatlas
 
-Bakery's xatlas backend runs Bakery's own `xatlasLib.dll` through the Wine host. The active `libxatlasLib.so` is the ABI proxy; there is no separate native xatlas build. The pack, unwrap, multi-atlas, explicit single-atlas and default regression tests all pass using Bakery's own implementation. The Wine path uses a persistent host with readiness pings, serialized startup and shutdown, and TCP_NODELAY for practical IPC throughput. Use `3. Activate xatlas` in the setup wizard if the proxy is not active, then restart Unity before baking because native plugins may already be loaded.
+Bakery's xatlas backend runs Bakery's own `xatlasLib.dll` through the Wine host. The active `libxatlasLib.so` is the ABI proxy; there is no separate native xatlas build. The pack, unwrap, multi-atlas, explicit single-atlas and default regression tests all pass using Bakery's own implementation. The Wine path uses a persistent host with readiness pings, serialized startup and shutdown, and TCP_NODELAY for practical IPC throughput. Use `Activate xatlas` in the setup wizard if the proxy is not active, then restart Unity before baking because native plugins may already be loaded.
 
 Two-level LOD groups are tested. Very large meshes and the 32-bit index guard are not covered on this Unity version. Explicit groups intentionally produce one atlas; multi-atlas coverage uses implicit groups.
 
@@ -56,7 +58,7 @@ Two-level LOD groups are tested. Very large meshes and the 32-bit index guard ar
 
 ## Notes
 
-- The first `1. Run Setup` needs network access to download the winetricks components and the NVIDIA CUDA/OptiX libraries.
+- The first setup run (`PATCH!` when the Wine prefix is missing or incomplete) needs network access to download the winetricks components and the NVIDIA CUDA/OptiX libraries. `winetricks` must be on the `PATH` of the Unity process; copies bundled by Lutris or other launchers are not visible to Unity. `PATCH!` reports this.
 - The prebuilt `bakery_wine_host.exe` under `Assets/Editor/x64/Bakery/MarksMOD/Native/dist~/bin` is required; the setup wizard does not build it. It is a Windows helper launched through your system Wine (`/usr/bin/wine` by default), so Wine must be installed separately.
 - The Linux plugin shims are provided under `Assets/Plugins/x86_64`.
 - D3D11 tools (seamfixer, denoisers, buffer generators) are launched through Wine with explicit DXVK DLL overrides and the configured Wine prefix.

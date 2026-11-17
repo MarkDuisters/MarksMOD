@@ -6,6 +6,7 @@ using UnityEngine;
 public static class BakeryToolPaths
 {
     static string cachedEditorRoot;
+    static string cachedLibrariesDirectory;
 
     public static bool IsLinuxEditor
     {
@@ -79,6 +80,8 @@ public static class BakeryToolPaths
     {
         get
         {
+            if (!string.IsNullOrEmpty(cachedLibrariesDirectory)) return cachedLibrariesDirectory;
+
             var guids = AssetDatabase.FindAssets("libxatlasLib_wine", null);
             if (guids != null)
             {
@@ -86,12 +89,20 @@ public static class BakeryToolPaths
                 {
                     string path = AssetDatabase.GUIDToAssetPath(guids[i]);
                     string dir = Path.GetDirectoryName(ToAbsolutePath(path));
-                    if (!string.IsNullOrEmpty(dir) && Directory.Exists(dir)) return dir;
+                    if (!string.IsNullOrEmpty(dir) && Directory.Exists(dir))
+                    {
+                        cachedLibrariesDirectory = dir;
+                        return dir;
+                    }
                 }
             }
 
             var files = Directory.GetFiles(Application.dataPath, "libxatlasLib_wine.so", SearchOption.AllDirectories);
-            if (files != null && files.Length > 0) return Path.GetDirectoryName(files[0]);
+            if (files != null && files.Length > 0)
+            {
+                cachedLibrariesDirectory = Path.GetDirectoryName(files[0]);
+                return cachedLibrariesDirectory;
+            }
 
             return Path.Combine(Application.dataPath, "Plugins/x86_64");
         }
