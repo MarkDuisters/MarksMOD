@@ -146,9 +146,8 @@ Unity would import them as native plugins and report duplicate names alongside
 `MarksMOD/Assets/Plugins/x86_64`. `install-libs` publishes the loadable copies to
 `MarksMOD/Assets/Plugins/x86_64`.
 
-The glue launches tools through `BAKERY_RUNNER` (default `wine`; also `proton run`, `umu-run`, or
-`none` for native tools), resolving logical names against `BAKERY_TOOLS_DIR` with `BAKERY_TOOL_EXT`.
-See `wine/README.md`.
+The glue launches tools through `BAKERY_RUNNER` (default `wine`; `wine64` is used when available),
+resolving logical names against `BAKERY_TOOLS_DIR` with `BAKERY_TOOL_EXT`. See `wine/README.md`.
 
 After replacing a `.so` file, restart Unity before baking because native plugins may already be loaded.
 

@@ -26,6 +26,18 @@ public static class BakeryLinuxPatcher
         "ftModelPostProcessor.cs"
     };
 
+    static readonly string[] PluginShims =
+    {
+        "libbakery_glue.so",
+        "libfrender.so",
+        "libxatlasLib.so",
+        "libxatlasLib_wine.so",
+        "libsimpleProgressBar.so",
+        "libhalffloat2vb.so",
+        "libuvrepack.so",
+        "libuser32.so"
+    };
+
     public static IReadOnlyList<string> PatchTargets
     {
         get { return Targets; }
@@ -171,18 +183,99 @@ public static class BakeryLinuxPatcher
 
     public static PatchResult RestoreAndRemoveMod()
     {
-        var result = RestoreFrom(ScriptsDirectory, BackupDirectory, false);
-        if (!result.Success) return result;
+        var result = new PatchResult();
+
+        if (BakeryLinuxSetup.IsRunning)
+        {
+            result.Errors.Add("Wine setup is running; cancel it before removing MarksMOD.");
+            return result;
+        }
+        if (BakeryLinuxProbeRunner.Running)
+        {
+            result.Errors.Add("The bridge test is running; wait for it to finish before removing MarksMOD.");
+            return result;
+        }
+        if (BakeryProgress.IsShown)
+        {
+            result.Errors.Add("A bake is in progress; wait for it to finish before removing MarksMOD.");
+            return result;
+        }
+
+        bool hasBackups = false;
+        try
+        {
+            hasBackups = Directory.Exists(BackupDirectory) &&
+                Directory.GetFiles(BackupDirectory, "*.bak").Length > 0;
+        }
+        catch { }
+
+        if (hasBackups)
+        {
+            result = RestoreFrom(ScriptsDirectory, BackupDirectory, false);
+            if (!result.Success) return result;
+        }
+        else if (AnyPatchApplied())
+        {
+            result.Errors.Add("No patch backups found; cannot safely restore the patched Bakery files.");
+            return result;
+        }
+        else
+        {
+            result.Messages.Add("No patch backups found; Bakery appears unpatched.");
+        }
+
+        if (Application.platform == RuntimePlatform.LinuxEditor)
+        {
+            BakeryWineHost.Stop();
+
+            if (BakeryWineHost.IsListening())
+            {
+                result.Messages.Add("Wine host is still listening; left the Wine prefix in place: " +
+                    BakeryLinuxSetup.PrefixPath);
+            }
+            else
+            {
+                string prefix = BakeryLinuxSetup.PrefixPath;
+                if (!Directory.Exists(prefix))
+                {
+                    result.Messages.Add("Wine prefix already absent: " + prefix);
+                }
+                else
+                {
+                    string error;
+                    if (BakeryLinuxSetup.RemoveWinePrefix(out error))
+                    {
+                        result.Messages.Add("Removed Wine prefix: " + prefix);
+                        result.Changed = true;
+                    }
+                    else
+                    {
+                        result.Messages.Add("Left Wine prefix in place: " + prefix + " (" + error + ")");
+                    }
+                }
+            }
+        }
+
+        RemovePluginShims(result);
 
         string modAssetPath = BakeryToolPaths.ToAssetPath(BakeryToolPaths.MarksModDirectory);
         try
         {
             if (AssetDatabase.IsValidFolder(modAssetPath))
             {
-                if (!AssetDatabase.DeleteAsset(modAssetPath))
+                if (AssetDatabase.DeleteAsset(modAssetPath))
+                {
+                    result.Messages.Add("Removed " + modAssetPath);
+                    result.Changed = true;
+                }
+                else
                 {
                     result.Errors.Add("Could not delete " + modAssetPath);
                 }
+            }
+            else
+            {
+                result.Messages.Add("MarksMOD folder not found: " + modAssetPath);
             }
         }
         catch (Exception e)
@@ -190,15 +283,74 @@ public static class BakeryLinuxPatcher
             result.Errors.Add("Could not delete " + modAssetPath + ": " + e.Message);
         }
 
-        if (result.Errors.Count == 0)
+        try
         {
-            result.Messages.Add("Removed " + modAssetPath);
-            result.Changed = true;
             AssetDatabase.Refresh(ImportAssetOptions.ForceUpdate);
         }
+        catch { }
 
         result.Success = result.Errors.Count == 0;
         return result;
+    }
+
+    static bool AnyPatchApplied()
+    {
+        foreach (var name in Targets)
+        {
+            string path = Path.Combine(ScriptsDirectory, name);
+            if (!File.Exists(path)) continue;
+
+            try
+            {
+                if (BakeryLinuxPatchRules.IsFilePatched(name, File.ReadAllText(path))) return true;
+            }
+            catch
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    static void RemovePluginShims(PatchResult result)
+    {
+        string directory = BakeryToolPaths.LibrariesDirectory;
+        if (string.IsNullOrEmpty(directory) || !Directory.Exists(directory))
+        {
+            result.Messages.Add("Plugin shim directory not found: " + directory);
+            return;
+        }
+
+        foreach (var name in PluginShims)
+        {
+            string path = Path.Combine(directory, name);
+            string meta = path + ".meta";
+            try
+            {
+                bool removed = false;
+                if (File.Exists(path))
+                {
+                    File.Delete(path);
+                    removed = true;
+                }
+                if (File.Exists(meta))
+                {
+                    File.Delete(meta);
+                    removed = true;
+                }
+
+                if (removed)
+                {
+                    result.Messages.Add("Removed plugin shim: " + name);
+                    result.Changed = true;
+                }
+            }
+            catch (Exception e)
+            {
+                result.Errors.Add("Could not remove " + name + ": " + e.Message);
+            }
+        }
     }
 
     public static PatchResult RestoreFrom(string scriptsDirectory, string backupDirectory, bool refresh = true)

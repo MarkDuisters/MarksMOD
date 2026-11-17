@@ -12,7 +12,7 @@ Linux Unity -> libbakery_glue.so -> RunLocalProcess -> wine ftraceRTX9.exe / den
 
 ## Packaging decision
 
-Do not vendor a Wine build into the add-on. Use the system Wine (or Proton) plus `winetricks`.
+Do not vendor a Wine build into the add-on. Use the system Wine plus `winetricks`.
 
 Reasons:
 - Size: Wine + a prefix is hundreds of MB to over 1 GB per install; it does not belong in a Unity asset.
@@ -20,21 +20,21 @@ Reasons:
   triggers source/notice obligations and conflicts with the Asset Store EULA conversation.
 - Host dependencies remain: the NVIDIA driver, Vulkan loader, X11/Wayland libs and the kernel driver
   are still required, so bundling Wine does not make the add-on self-contained.
-- Updates and security: distro/Steam-managed Wine and DXVK are patched; a bundled copy goes stale.
+- Updates and security: distro-managed Wine and DXVK are patched; a bundled copy goes stale.
 
 Provide instead:
-1. Auto-detection of `wine64`/`wine`, Steam Proton, and Bottles/Lutris prefixes.
+1. Auto-detection of `wine64`/`wine`.
 2. `BAKERY_WINE` and `BAKERY_WINEPREFIX` environment overrides.
 3. `bootstrap.sh` to create a 64-bit prefix and install the runtime pieces.
 4. `probe.sh` to verify the environment before a bake.
 5. Clear instructions for users who have no Wine.
 
 If a fully self-contained experience is required, ship it as a separate downloadable runtime
-(AppImage/Flatpak/Proton launcher), not inside `Assets/`.
+(AppImage/Flatpak launcher), not inside `Assets/`.
 
 ## Prerequisites
 
-- 64-bit Wine (`wine64` preferred) or a Proton/Wine runner from Steam, Bottles or Lutris.
+- 64-bit Wine (`wine64` preferred, otherwise `wine`).
 - `winetricks` (used for the VC++ runtime, DXVK and d3dcompiler).
 - NVIDIA proprietary driver with CUDA support; `nvidia-smi` must work.
 - Vulkan loader and a Vulkan-capable driver.
@@ -58,10 +58,12 @@ The prefix defaults to `${XDG_DATA_HOME:-$HOME/.local/share}/bakery/wineprefix`.
 - **PATCH!** runs the requirements check, runs `bootstrap.sh` with a progress bar and cancel when
   the Wine prefix is missing or incomplete, then patches the Bakery scripts.
 - **Activate xatlas** installs Bakery's xatlas proxy.
-- **Restore Bakery** restores the patched files and removes the MarksMOD folder from Bakery.
+- **Restore Bakery** restores the patched files, removes the MarksMOD folder and the Linux plugin
+  shims, stops the Wine host, and deletes the Bakery-owned Wine prefix. Downloaded `nvidia-libs`,
+  other Wine prefixes and user Bakery assets are kept.
 
 The wizard (`BakeryLinuxDiagnostics`) reports OK/WARN/FAIL per component: Linux editor, runner
-(`BAKERY_RUNNER`/Wine/Proton/umu), winetricks, NVIDIA driver, prefix, VC runtime, DXVK
+(`BAKERY_RUNNER`/Wine), winetricks, NVIDIA driver, prefix, VC runtime, DXVK
 (`d3d11.dll`), `d3dcompiler_47`, `nvcuda.dll` mapping, setup sentinel, `libbakery_glue.so`,
 `libfrender.so`, `bakery_wine_host.exe`, the Windows payload (`frender.dll`, `ftraceRTX9.exe`,
 denoisers, combine tools), and the Unity graphics API.
@@ -168,31 +170,17 @@ Linux-hosted `llvm-mingw` toolchain into `~/.local/share/bakery/mingw` (no sudo 
 Release packaging copies the locally built binary into `dist~/bin/`. The repo keeps the source, the
 build script and the prebuilt binary; there is no CI build.
 
-## Runners: Wine, Proton, umu
+## Runner: Wine
 
 `libbakery_glue.so` resolves tool names passed by the managed code (for example `ftraceRTX9`) into
-`<tools-dir>/<name>.exe` and launches them through a runner. Environment:
+`<tools-dir>/<name>.exe` and launches them through Wine. Environment:
 
 | Variable | Default | Meaning |
 |---|---|---|
-| `BAKERY_RUNNER` | `wine` | runner prefix; e.g. `wine64`, `wine`, `proton run`, `umu-run`, or `none` for native tools |
+| `BAKERY_RUNNER` | `wine` | Wine executable; use `wine64` when available |
 | `BAKERY_TOOLS_DIR` | `<libdir>/../bin` | directory containing the tool executables |
 | `BAKERY_TOOL_EXT` | `.exe` if a runner is set, else empty | extension appended to logical tool names |
 | `BAKERY_WINEPREFIX` | unset | exported as `WINEPREFIX` for the child process |
-
-### Proton
-
-Proton (and `umu-run`) is supported as an optional runner and is the best D3D11->Vulkan path because
-it bundles a tuned DXVK. It does **not** remove the CUDA/OptiX dependency: Windows OptiX still needs
-`nvcuda.dll` mapped to the host driver. Proton's Steam Runtime/container can make host NVIDIA libs
-harder to expose, and its prefixes are Steam-managed, so plain Wine is easier to debug.
-
-Recommendation: default to Wine + DXVK for the bridge; allow Proton as a fallback for D3D11 issues:
-
-```
-BAKERY_RUNNER="proton run" STEAM_COMPAT_DATA_PATH=... STEAM_COMPAT_CLIENT_INSTALL_PATH=... ./probe.sh
-BAKERY_RUNNER=umu-run ./probe.sh
-```
 
 ## Limitations
 

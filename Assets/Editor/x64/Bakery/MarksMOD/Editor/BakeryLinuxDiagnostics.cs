@@ -36,8 +36,6 @@ public static class BakeryLinuxDiagnostics
         string runnerEnv = Environment.GetEnvironmentVariable("BAKERY_RUNNER");
         string wine64 = FindInPath("wine64");
         string wine = FindInPath("wine");
-        string proton = FindInPath("proton");
-        string umu = FindInPath("umu-run");
 
         if (!string.IsNullOrEmpty(runnerEnv))
             Add(list, "Runner", BakeryCheckStatus.Ok, "BAKERY_RUNNER=" + runnerEnv);
@@ -45,12 +43,8 @@ public static class BakeryLinuxDiagnostics
             Add(list, "Runner", BakeryCheckStatus.Ok, wine64);
         else if (wine != null)
             Add(list, "Runner", BakeryCheckStatus.Ok, wine);
-        else if (umu != null)
-            Add(list, "Runner", BakeryCheckStatus.Warn, "umu-run found; set BAKERY_RUNNER=umu-run");
-        else if (proton != null)
-            Add(list, "Runner", BakeryCheckStatus.Warn, "proton found; set BAKERY_RUNNER=\"proton run\"");
         else
-            Add(list, "Runner", BakeryCheckStatus.Fail, "install Wine, Proton or umu-launcher");
+            Add(list, "Runner", BakeryCheckStatus.Fail, "install Wine");
 
         Add(list, "winetricks", FindInPath("winetricks") != null ? BakeryCheckStatus.Ok : BakeryCheckStatus.Warn,
             FindInPath("winetricks") != null ? "found" : "needed for setup");
@@ -69,7 +63,7 @@ public static class BakeryLinuxDiagnostics
         CheckFile(list, "CUDA/OptiX bridge", sys32, new[] { "nvcuda.dll", "nvoptix.dll" }, BakeryCheckStatus.Fail);
 
         Add(list, "Setup sentinel", BakeryLinuxSetup.SetupComplete ? BakeryCheckStatus.Ok : BakeryCheckStatus.Fail,
-            BakeryLinuxSetup.SetupComplete ? "bootstrap completed" : "run Setup Wine Environment");
+            BakeryLinuxSetup.SetupComplete ? "bootstrap completed" : "click PATCH! to set up Wine and patch Bakery");
 
         string libs = BakeryToolPaths.LibrariesDirectory;
         string xatlasMissing;

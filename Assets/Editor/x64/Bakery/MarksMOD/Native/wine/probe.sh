@@ -104,7 +104,7 @@ fi
 command -v winetricks >/dev/null 2>&1 && ok "winetricks present" || warn "winetricks not found"
 command -v nvidia-smi >/dev/null 2>&1 && ok "nvidia-smi present: $(nvidia-smi --query-gpu=name --format=csv,noheader 2>/dev/null | head -1)" || warn "nvidia-smi not found"
 
-for r in wine64 wine proton umu-run; do
+for r in wine64 wine; do
     command -v "$r" >/dev/null 2>&1 && ok "runner available: $r"
 done
 [ -n "${BAKERY_RUNNER:-}" ] && ok "BAKERY_RUNNER=$BAKERY_RUNNER" || warn "BAKERY_RUNNER unset (defaults to wine)"

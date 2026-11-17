@@ -64,6 +64,57 @@ public static class BakeryLinuxSetup
         get { return File.Exists(Path.Combine(PrefixPath, SentinelName)); }
     }
 
+    public static bool IsBakeryOwnedPrefix(string path)
+    {
+        try
+        {
+            if (string.IsNullOrEmpty(path) || !Directory.Exists(path)) return false;
+
+            string full = Path.GetFullPath(path).TrimEnd(Path.DirectorySeparatorChar);
+            string root = Path.GetFullPath(WineRootPath).TrimEnd(Path.DirectorySeparatorChar);
+            if (string.IsNullOrEmpty(root) || full == root) return false;
+            if (!full.StartsWith(root + Path.DirectorySeparatorChar, StringComparison.Ordinal)) return false;
+
+            FileAttributes attributes = File.GetAttributes(full);
+            if ((attributes & FileAttributes.ReparsePoint) != 0) return false;
+
+            return File.Exists(Path.Combine(full, SentinelName)) ||
+                   Directory.Exists(Path.Combine(full, "drive_c"));
+        }
+        catch
+        {
+            return false;
+        }
+    }
+
+    public static bool RemoveWinePrefix(out string error)
+    {
+        error = null;
+        string prefix = PrefixPath;
+        if (string.IsNullOrEmpty(prefix))
+        {
+            error = "prefix path is empty";
+            return false;
+        }
+        if (!Directory.Exists(prefix)) return true;
+        if (!IsBakeryOwnedPrefix(prefix))
+        {
+            error = "not a Bakery-owned prefix";
+            return false;
+        }
+
+        try
+        {
+            Directory.Delete(prefix, true);
+            return true;
+        }
+        catch (Exception e)
+        {
+            error = e.Message;
+            return false;
+        }
+    }
+
     public static bool PrefixLooksReady
     {
         get

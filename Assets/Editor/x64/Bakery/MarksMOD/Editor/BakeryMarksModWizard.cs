@@ -217,12 +217,53 @@ public class BakeryMarksModWizard : EditorWindow
 
     static void RestoreBakery()
     {
-        if (!EditorUtility.DisplayDialog(
-            "Bakery / MarksMOD",
-            "This restores all patched Bakery files and removes the MarksMOD folder from Bakery.\n\n" +
-            "Linux plugin shims in Assets/Plugins are kept.\n\nContinue?",
-            "Restore and remove",
-            "Cancel"))
+        if (BakeryLinuxSetup.IsRunning)
+        {
+            EditorUtility.DisplayDialog("Bakery", "Wine setup is running. Cancel it before removing MarksMOD.", "OK");
+            return;
+        }
+        if (BakeryLinuxProbeRunner.Running)
+        {
+            EditorUtility.DisplayDialog("Bakery", "The bridge test is running. Wait for it to finish before removing MarksMOD.", "OK");
+            return;
+        }
+        if (BakeryProgress.IsShown)
+        {
+            EditorUtility.DisplayDialog("Bakery", "A bake is in progress. Wait for it to finish before removing MarksMOD.", "OK");
+            return;
+        }
+
+        string prefix = BakeryLinuxSetup.PrefixPath;
+        bool prefixExists = Directory.Exists(prefix);
+        bool prefixOwned = prefixExists && BakeryLinuxSetup.IsBakeryOwnedPrefix(prefix);
+
+        string message =
+            "Remove MarksMOD completely?\n\n" +
+            "This will:\n" +
+            "  - restore the patched Bakery files from backup\n" +
+            "  - remove the MarksMOD folder\n" +
+            "  - remove the Linux plugin shims from Assets/Plugins/x86_64\n" +
+            "  - stop the Bakery Wine host\n" +
+            "  - delete the Bakery Wine prefix:\n" +
+            "      " + prefix + "\n\n" +
+            "The Wine host and prefix are shared by all Unity projects using Bakery.\n\n" +
+            "It will keep:\n" +
+            "  - downloaded nvidia-libs\n" +
+            "  - your Bakery scenes, lightmaps and assets\n" +
+            "  - /tmp logs and other Wine prefixes\n\n";
+
+        if (!prefixExists)
+        {
+            message += "The Wine prefix is already absent.\n\n";
+        }
+        else if (!prefixOwned)
+        {
+            message += "This prefix is custom or possibly shared; it will be left in place.\n\n";
+        }
+
+        message += "Restart Unity after this completes.\n\nContinue?";
+
+        if (!EditorUtility.DisplayDialog("Bakery / MarksMOD", message, "Remove MarksMOD", "Cancel"))
         {
             return;
         }
@@ -230,12 +271,20 @@ public class BakeryMarksModWizard : EditorWindow
         var result = BakeryLinuxPatcher.RestoreAndRemoveMod();
         if (!result.Success)
         {
-            Report(result, "Bakery restore failed.");
+            Report(result, "MarksMOD removal failed.");
             return;
         }
 
-        Debug.Log("[Bakery MarksMOD] Bakery restored and MarksMOD removed from Bakery.\n" + string.Join("\n", result.Messages.ToArray()));
-        EditorUtility.DisplayDialog("Bakery / MarksMOD", "Bakery restored. MarksMOD was removed from Bakery. Unity will recompile.", "OK");
+        Debug.Log("[Bakery MarksMOD] MarksMOD removed.\n" + string.Join("\n", result.Messages.ToArray()));
+
+        string done = "MarksMOD was removed and Bakery was restored.";
+        if (Directory.Exists(prefix))
+        {
+            done += "\n\nThe Wine prefix was left in place:\n" + prefix;
+        }
+        done += "\n\nRestart Unity to unload the native plugins.";
+
+        EditorUtility.DisplayDialog("Bakery / MarksMOD", done, "OK");
     }
 
     static void Report(BakeryLinuxPatcher.PatchResult result, string successMessage)
@@ -287,7 +336,14 @@ public class BakeryMarksModWizard : EditorWindow
                 "OK");
             return;
         }
-        EditorUtility.RevealInFinder(path);
+        try
+        {
+            EditorUtility.OpenWithDefaultApp(path);
+        }
+        catch
+        {
+            EditorUtility.RevealInFinder(path);
+        }
     }
 }
 #endif

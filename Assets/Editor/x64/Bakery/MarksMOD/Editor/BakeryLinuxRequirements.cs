@@ -57,14 +57,10 @@ public static class BakeryLinuxRequirements
         string winePath = null;
         if (!string.IsNullOrEmpty(runner))
         {
-            string[] parts = runner.Split(new[] { ' ' }, StringSplitOptions.RemoveEmptyEntries);
-            string first = parts.Length > 0 ? parts[0] : null;
-            if (!string.IsNullOrEmpty(first))
-            {
-                winePath = Path.IsPathRooted(first)
-                    ? (File.Exists(first) ? first : null)
-                    : BakeryLinuxDiagnostics.FindInPath(first);
-            }
+            string configured = runner.Trim();
+            winePath = Path.IsPathRooted(configured)
+                ? (File.Exists(configured) ? configured : null)
+                : BakeryLinuxDiagnostics.FindInPath(configured);
         }
         if (winePath == null) winePath = BakeryLinuxDiagnostics.FindInPath("wine64");
         if (winePath == null) winePath = BakeryLinuxDiagnostics.FindInPath("wine");
@@ -90,8 +86,6 @@ public static class BakeryLinuxRequirements
             int wineMajor;
             if (wineMatch.Success && int.TryParse(wineMatch.Groups[1].Value, out wineMajor) && wineMajor < 10)
                 detail += "; Wine 10+ is recommended";
-            if (!string.IsNullOrEmpty(runner) && runner.IndexOf(' ') >= 0)
-                detail += "; multi-word runners may not work in probe.sh";
 
             Add(list, "Wine", versionOk ? BakeryCheckStatus.Ok : BakeryCheckStatus.Warn, detail);
         }

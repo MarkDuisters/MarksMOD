@@ -10,9 +10,20 @@ MarksMOD is a Linux/Wine compatibility layer for an existing Bakery installation
 - NVIDIA GPU and a driver that supports CUDA and OptiX.
 - Wine (tested with wine-11.19) and winetricks, installed through your distribution's package manager.
 - glibc, libstdc++ and liblz4 compatible with the shipped plugin shims. `PATCH!` reports the exact glibc requirement of the binaries.
-- The `main` and `legacy-glibc` branches contain identical code; only the prebuilt Linux shims differ. `main` targets newer glibc, `legacy-glibc` targets an older baseline. Check `ldd --version` or the glibc row in `PATCH!` and use the matching branch.
 - `/bin/bash`, `python3`, `flock`, `curl` or `wget`, and `tar` for the setup/probe scripts.
 - Bakery v1.985 installed in your Unity project before merging MarksMOD. The patcher is source-anchored to this version; other Bakery versions report missing files or patch anchors. See the [MarksMOD README](https://github.com/MarkDuisters/MarksMOD?tab=readme-ov-file) for details.
+
+### Native shim glibc compatibility
+
+The `main` and `legacy-glibc` branches contain identical code; only the prebuilt Linux shims differ. Check `ldd --version | head -1`, or the glibc row in `PATCH!`, before choosing.
+
+| Branch | Minimum glibc | Typical distributions |
+|---|---|---|
+| `main` | 2.43 | Current rolling releases such as Arch Linux, Manjaro and openSUSE Tumbleweed; Fedora/Ubuntu releases whose glibc is 2.43 or newer |
+| `legacy-glibc` | 2.34 | Ubuntu 22.04/24.04, Linux Mint 21.x/22.x, Debian 12/13, Fedora 35+, RHEL 9/10. Also runs on newer glibc |
+| unsupported | below 2.34 | Ubuntu 20.04, Linux Mint 20.x, Debian 11, RHEL 8. Build the shims locally or use a newer distribution |
+
+`legacy-glibc` is the safer choice if you are unsure: it works on glibc 2.34 and newer. Distribution glibc versions change, so the table is a guide; `PATCH!` remains authoritative.
 
 ## Install
 
@@ -22,7 +33,7 @@ MarksMOD is a Linux/Wine compatibility layer for an existing Bakery installation
 4. Click `Activate xatlas` to install Bakery's xatlas proxy, then restart Unity.
 5. Use `Re-check` and `Test Bridge` to validate the setup.
 
-`Restore Bakery` restores the original Bakery files from the stored backups and removes the `MarksMOD` folder from Bakery. The Linux plugin shims in `Assets/Plugins` are kept.
+`Restore Bakery` fully removes MarksMOD: it restores the original Bakery files, removes the `MarksMOD` folder and the Linux plugin shims, stops the Wine host, and deletes the Bakery-owned Wine prefix. Downloaded `nvidia-libs`, other Wine prefixes, `/tmp` logs and your Bakery assets are kept. Custom prefixes outside the Bakery root are left in place.
 
 The current patcher version is 18 and targets seven Bakery files.
 
@@ -72,12 +83,15 @@ MarksMOD is licensed under the GNU General Public License v3.0. See [LICENSE](LI
 
 ## Screenshots
 
+Installing MarksMOD by merging the repository `Assets/` folder into the Unity project:
+
+![Merging the repository Assets folder into a Unity project](docs/images/mod-install.gif)
+
 Bakery menu entry and the MarksMOD setup wizard:
 
+![Bakery > MarksMOD menu opening the setup wizard and running PATCH! (animated)](docs/images/mod-wizard.gif)
+![Setup wizard after a successful PATCH!, with every environment check OK](docs/images/Wizard.png)
 ![Bakery menu with the MarksMOD submenu](docs/images/bakery-menu-marksmod.png)
-![Setup wizard after patching Bakery](docs/images/wizard-patched.png)
-![Activating Bakery's built-in xatlas backend](docs/images/wizard-xatlas.png)
-![Wizard environment checks and probe output](docs/images/wizard-checks.png)
 
 Baking in the test scene:
 
